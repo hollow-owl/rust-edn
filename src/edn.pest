@@ -1,0 +1,34 @@
+WHITESPACE = _{ " " | "\t" | NEWLINE | "," }
+COMMENT = _{";" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
+edn = { (WHITESPACE|COMMENT)* ~ (expr)+ ~ (WHITESPACE|COMMENT)* }
+expr = _{ nil | boolean | string | character | keyword | symbol | number | list | vector | map | set | tagged_element }
+nil = { "nil" }
+boolean = { "true" | "false" }
+
+string = ${ "\"" ~ inner ~ "\"" }
+inner = @{ char* }
+char = {
+    !("\"" | "\\") ~ ANY
+    | "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+    | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
+}
+
+character = { "\\" ~ ANY }
+
+keyword = { ":" ~ ident }
+symbol = { (ident ~  "/")* ~ ident }
+
+ident = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_" | "-")* }
+
+number = @{
+    "-"?
+    ~ ("0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*)
+    ~ ("." ~ ASCII_DIGIT*)?
+    ~ (^"e" ~ ("+" | "-")? ~ ASCII_DIGIT+)?
+}
+
+list = { "(" ~ expr* ~ ")" }
+vector = { "[" ~ expr* ~ "]" }
+map = { "{" ~ (expr ~ expr)* ~ "}" }
+set = { "#{" ~ expr* ~ "}" }
+tagged_element = { "#" ~ symbol ~ expr }
