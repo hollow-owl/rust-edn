@@ -1,0 +1,6 @@
+[submodule "examples/edn-tests"]
+	path = examples/edn-tests
+	url = git@github.com:shaunxcode/edn-tests.git
+[submodule "examples/antlr-grammars-v4"]
+	path = examples/antlr-grammars-v4
+	url = git@github.com:salewski/antlr-grammars-v4.git
