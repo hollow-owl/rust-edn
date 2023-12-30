@@ -1,8 +1,10 @@
 WHITESPACE = _{ " " | "\t" | NEWLINE | "," }
 COMMENT = _{";" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
-edn = { (WHITESPACE|COMMENT)* ~ (expr)+ ~ (WHITESPACE|COMMENT)* }
-expr = _{ nil | boolean | string | character | keyword | symbol | number | list | vector | map | set | tagged_element }
+edn = { (SOI ~ expr ~ EOI) | SOI ~ EOI }
+expr = _{ string | character | number | list | vector | map | set | symbol | keyword | tagged_element}
 
+// TODO: parse nil and bools
+literal = { nil | boolean } 
 nil = { "nil" }
 boolean = { "true" | "false" }
 
@@ -14,17 +16,25 @@ char = {
     | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
 }
 
-character = @{ "\\" ~ ANY }
+character = @{ "\\" ~ ("newline"|"return"|"space"|"tab"|("u"~ASCII_HEX_DIGIT{4})|ANY)}
 
 // [:]?([\D&&[^/]].*/)?([\D&&[^/]][^/]*)
-keyword = ${ ":" ~ symbol }
-symbol = ${ namespace? ~ ident }
-namespace = @{ (ident ~ "/")+ }
+keyword = @{ ":" ~ ksymbol }
+ksymbol = @{ ((kprefix ~ "/") ~ ":"? ~ kname) | kname }
+kprefix = @{ ksym }
+kname = @{ ksym | "/" }
+ksym = @{ ("+"|"-"|".")? ~ ksym_first_char ~ sym_char* } 
+ksym_first_char = @{ ASCII_ALPHA|"."|"*"|"+"|"!"|"-"|"_"|"?"|"$"|"%"|"&"|"="|"<"|">"|"#"}
 
-// TODO: better identifier matching
-ident = @{ ASCII_ALPHANUMERIC+ }
+symbol = ${ (prefix ~ "/")? ~ name }
+prefix = ${ sym }
+name = ${ sym | "/" }
+sym = @{ (("+"|"-"|".")? ~ sym_first_char ~ sym_char*) | (("+"|"-"|".") ~ !ASCII_DIGIT) } 
+sym_char = @{ ASCII_ALPHANUMERIC|"."|"*"|"+"|"!"|"-"|"_"|"?"|"$"|"%"|"&"|"="|"<"|">"|"#"|":"}
+sym_first_char = @{ ASCII_ALPHA|"."|"*"|"+"|"!"|"-"|"_"|"?"|"$"|"%"|"&"|"="|"<"|">"}
 
-number = ${ integer | float | ratio }
+
+number = ${ float | ratio | integer }
 //  ([-+]?)(?:(0)|([1-9][0-9]*)|0[xX]([0-9A-Fa-f]+)|0([0-7]+)|([1-9][0-9]?)[rR]([0-9A-Za-z]+)|0[0-9]+)(N)?
 integer = @{ ("-" | "+")? ~ (decimal | hex | octal | radix ) ~ "N"?}
 decimal = @{ "0" | (ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*)}
@@ -42,4 +52,6 @@ list = { "(" ~ expr* ~ ")" }
 vector = { "[" ~ expr* ~ "]" }
 map = { "{" ~ (expr ~ expr)* ~ "}" }
 set = { "#{" ~ expr* ~ "}" }
-tagged_element = { "#" ~ symbol ~ expr }
+
+tagged_element = { tag ~ expr }
+tag = @{ "#" ~ !"/" ~ symbol }

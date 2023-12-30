@@ -1,4 +1,4 @@
-; Comments start with a semicolon.
+(; Comments start with a semicolon.
 ; Anything after the semicolon is ignored.
 
 ;;;;;;;;;;;;;;;;;;;
@@ -63,3 +63,4 @@ github/fork   ; you can't eat with this
 ; EDN can be extended by tagging elements with # symbols.
 
 #MyYelpClone/MenuItem {:name "eggs-benedict" :rating 10}
+)
