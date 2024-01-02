@@ -19,6 +19,22 @@ struct EdnParser;
 // float
 // ([-+]?[0-9]+(\.[0-9]*)?([eE][-+]?[0-9]+)?)(M)?
 
+pub enum Value {
+    Nil,
+    Symbol(String),
+    Keyword(String),
+    String(String),
+    Bool(Bool),
+    Char(Char),
+    Int(usize),
+    Float(f64),
+    List(Vec<Value>),
+    Vec(Vec<Value>),
+    Map(HashMap<Value,Value>),
+    Set(Set<Value>),
+    // TaggedElement(tag,value)
+}
+
 fn read_files(dirs: Vec<&str>) -> Vec<Result<PathBuf, (PathBuf, pest::error::Error<Rule>)>> {
     let dirs: Vec<_> = dirs.into_iter().filter(|x| x.ends_with("edn")).collect();
     let dirs = dirs
