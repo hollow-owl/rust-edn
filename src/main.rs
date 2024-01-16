@@ -19,21 +19,21 @@ struct EdnParser;
 // float
 // ([-+]?[0-9]+(\.[0-9]*)?([eE][-+]?[0-9]+)?)(M)?
 
-pub enum Value {
-    Nil,
-    Symbol(String),
-    Keyword(String),
-    String(String),
-    Bool(Bool),
-    Char(Char),
-    Int(usize),
-    Float(f64),
-    List(Vec<Value>),
-    Vec(Vec<Value>),
-    Map(HashMap<Value,Value>),
-    Set(Set<Value>),
-    // TaggedElement(tag,value)
-}
+// pub enum Value {
+//     Nil,
+//     Symbol(String),
+//     Keyword(String),
+//     String(String),
+//     Bool(Bool),
+//     Char(Char),
+//     Int(usize),
+//     Float(f64),
+//     List(Vec<Value>),
+//     Vec(Vec<Value>),
+//     Map(HashMap<Value,Value>),
+//     Set(Set<Value>),
+//     // TaggedElement(tag,value)
+// }
 
 fn read_files(dirs: Vec<&str>) -> Vec<Result<PathBuf, (PathBuf, pest::error::Error<Rule>)>> {
     let dirs: Vec<_> = dirs.into_iter().filter(|x| x.ends_with("edn")).collect();
@@ -76,18 +76,20 @@ fn visit_dirs<T>(dir: &Path, cb: &dyn Fn(&DirEntry) -> T) -> Vec<T> {
     }
     out
 }
+
 fn main() {
-    // let mut file = File::open("test/learnxiny.edn").unwrap();
-    // let mut contents = String::new();
-    // file.read_to_string(&mut contents).unwrap();
-    // let a = EdnParser::parse(Rule::edn,&contents).unwrap();
-    // dbg!(a);
+    let mut file = File::open("test/learnxiny.edn").unwrap();
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).unwrap();
+    let a = EdnParser::parse(Rule::edn,&contents).unwrap();
+    dbg!(a);
 }
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
+    use walkdir::WalkDir;
     const VALID_FOLDERS: [&str; 4] = [
         "./test",
         "./examples/edn-tests/valid-edn",
@@ -95,6 +97,13 @@ mod tests {
         "./examples/antlr-grammars-v4/edn/examples",
     ];
     const INVALID_FOLDERS: [&str; 1] = ["./examples/edn-tests/invalid-edn"];
+
+    #[test]
+    fn walk_dir() {
+        for entry in WalkDir::new("./test") {
+            dbg!(entry);
+        }
+    }
 
     #[test]
     fn test_edn_files() {
