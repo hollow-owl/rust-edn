@@ -1,5 +1,13 @@
 # rust-edn
-Goal to conform to EDN Spec as close as possible
+Parser for Extensible Data Notation.
+
+Goal to conform to the [EDN Spec](https://github.com/edn-format/edn) as close as possible
+
+# TODO
+- parse to a struct instead of raw pest parsing
+- `#[derive(Serialize, Deserialize)]` traits
+- handle #_, #inst, #uuid
+- handle custom tagged elements
 
 # Tested with examples from
 https://github.com/shaunxcode/edn-tests  
