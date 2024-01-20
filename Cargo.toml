@@ -8,4 +8,6 @@ edition = "2021"
 [dependencies]
 pest = "2.7.5"
 pest_derive = "2.7.5"
+
+[dev-dependencies]
 walkdir = "2.4.0"
