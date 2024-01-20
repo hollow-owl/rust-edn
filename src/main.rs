@@ -64,7 +64,7 @@ mod tests {
 
         let mut results = Vec::new();
         for entry in files {
-            if entry.file_type().is_file() {
+            if entry.file_type().is_file() && entry.path().extension().map_or(false, |e| e == "edn") {
                 let file = fs::read_to_string(entry.path()).unwrap();
                 let parse_result = EdnParser::parse(Rule::edn, &file).map(|_| ());
                 results.push((entry.path().to_owned(), parse_result));
@@ -79,7 +79,7 @@ mod tests {
             if err.is_err() {
                 dbg!(path);
                 let err = err.unwrap_err();
-                dbg!(err);
+                println!("{}",err);
                 has_err = true;
             }
         }
