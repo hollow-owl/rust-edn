@@ -24,7 +24,7 @@ ksymbol = @{ ((kprefix ~ "/") ~ ":"? ~ kname) | kname }
 kprefix = @{ ksym }
 kname = @{ ksym | "/" }
 ksym = @{ ("+"|"-"|".")? ~ ksym_first_char ~ sym_char* } 
-ksym_first_char = @{ ASCII_ALPHA|"."|"*"|"+"|"!"|"-"|"_"|"?"|"$"|"%"|"&"|"="|"<"|">"|"#"}
+ksym_first_char = @{ ASCII_ALPHANUMERIC|"."|"*"|"+"|"!"|"-"|"_"|"?"|"$"|"%"|"&"|"="|"<"|">"|"#"}
 
 symbol = ${ (prefix ~ "/")? ~ name }
 prefix = ${ sym }
