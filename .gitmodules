@@ -7,3 +7,6 @@
 [submodule "examples/json5-rs"]
 	path = examples/json5-rs
 	url = https://github.com/callum-oakley/json5-rs.git
+[submodule "examples/clojure"]
+	path = examples/clojure
+	url = git@github.com:clojure/clojure.git
