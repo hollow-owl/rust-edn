@@ -4,9 +4,9 @@ edn = { (SOI ~ expr ~ EOI) | SOI ~ EOI }
 expr = _{ string | character | number | list | vector | map | set | symbol | keyword | tagged_element}
 
 // TODO: parse nil and bools
-literal = { nil | boolean } 
-nil = { "nil" }
-boolean = { "true" | "false" }
+literal = @{ nil | boolean } 
+nil = @{ "nil" }
+boolean = @{ "true" | "false" }
 
 string = ${ "\"" ~ inner ~ "\"" }
 inner = @{ char* }
@@ -26,9 +26,9 @@ kname = @{ ksym | "/" }
 ksym = @{ ("+"|"-"|".")? ~ ksym_first_char ~ sym_char* } 
 ksym_first_char = @{ ASCII_ALPHANUMERIC|"."|"*"|"+"|"!"|"-"|"_"|"?"|"$"|"%"|"&"|"="|"<"|">"|"#"}
 
-symbol = ${ (prefix ~ "/")? ~ name }
-prefix = ${ sym }
-name = ${ sym | "/" }
+symbol = @{ (prefix ~ "/")? ~ name }
+prefix = @{ sym }
+name = @{ sym | "/" }
 sym = @{ (("+"|"-"|".")? ~ sym_first_char ~ sym_char*) | (("+"|"-"|".") ~ !ASCII_DIGIT) } 
 sym_char = @{ ASCII_ALPHANUMERIC|"."|"*"|"+"|"!"|"-"|"_"|"?"|"$"|"%"|"&"|"="|"<"|">"|"#"|":"}
 sym_first_char = @{ ASCII_ALPHA|"."|"*"|"+"|"!"|"-"|"_"|"?"|"$"|"%"|"&"|"="|"<"|">"}

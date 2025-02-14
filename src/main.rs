@@ -1,7 +1,8 @@
-use std::{fs::{self, File}, io::Read};
+use std::{collections::{HashMap, HashSet}, fmt::Display, fs::{self, File}, io::Read};
 
-use pest::Parser;
+use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
+use serde::{Deserialize, Serialize};
 
 #[derive(Parser)]
 #[grammar = "edn.pest"] // relative to src
@@ -15,26 +16,71 @@ struct EdnParser;
 // float
 // ([-+]?[0-9]+(\.[0-9]*)?([eE][-+]?[0-9]+)?)(M)?
 
-// pub enum Value {
-//     Nil,
-//     Symbol(String),
-//     Keyword(String),
-//     String(String),
-//     Bool(Bool),
-//     Char(Char),
-//     Int(usize),
-//     Float(f64),
-//     List(Vec<Value>),
-//     Vec(Vec<Value>),
-//     Map(HashMap<Value,Value>),
-//     Set(Set<Value>),
-//     // TaggedElement(tag,value)
-// }
+#[derive(Debug, Serialize, Deserialize)]
+pub enum Value {
+    Nil,
+    Bool(bool),
+    String(String),
+    Char(char),
+    Symbol(String),
+    Keyword(String),
+    Int(usize),
+    Float(f64),
+    List(Vec<Value>),
+    Vec(Vec<Value>),
+    // Map(HashMap<String,Value>), // TODO: arbitrary Values as keys
+    // Set(HashSet<Value>), // TODO: arbitrary Sets
+    TaggedElement(String, Box<Value>), // #sym val
+}
+
+fn pair_to_value(pair: Pair<Rule>) -> Value {
+    dbg!(&pair);
+    match pair.as_rule() {
+        Rule::edn => pair_to_value(pair.into_inner().next().unwrap()),
+        Rule::symbol => {
+            let sym = pair.as_str();
+            match sym {
+                "nil" => Value::Nil,
+                "false" => Value::Bool(false),
+                "true" => Value::Bool(true),
+                _ => Value::Symbol(sym.to_owned())
+            }
+        },
+        Rule::keyword => {
+            let ksym = pair.as_str();
+            Value::Keyword(ksym.to_owned())
+        },
+        Rule::string => {
+            let mut pair = pair.into_inner();
+            let inner = pair.next().unwrap().as_str();
+            Value::String(inner.to_owned())
+        },
+        Rule::character => {
+            dbg!(pair);
+            unimplemented!()
+        },
+        Rule::list => Value::List(pair.into_inner().map(pair_to_value).collect()),
+        Rule::vector => Value::Vec(pair.into_inner().map(pair_to_value).collect()),
+        // Rule::set => Value::Map(pair.into_inner().map(pair_to_value).collect()),
+        // Rule::set => Value::Set(pair.into_inner().map(pair_to_value).collect()),
+        Rule::tagged_element => {
+            let mut pairs = pair.into_inner();
+            let tag = pairs.next().unwrap().as_str().to_owned();
+            let expr = pair_to_value(pairs.next().unwrap());
+            Value::TaggedElement(tag,Box::new(expr))
+        }
+        _ => unimplemented!()
+    }
+}
 
 fn main() {
-    let file = fs::read_to_string("test/learnxiny.edn").expect("could not read file");
+    // let file = fs::read_to_string("test/learnxiny.edn").expect("could not read file");
+    let file = "#_ (a b c)";
     let parsed = EdnParser::parse(Rule::edn,&file).unwrap();
-    dbg!(parsed);
+    dbg!(&parsed);
+    for edn in parsed {
+        dbg!(pair_to_value(edn));
+    }
 }
 
 #[cfg(test)]
