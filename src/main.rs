@@ -1,4 +1,5 @@
-
+mod edn_reader;
+use std::io::{self, Write};
 
 use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
@@ -43,22 +44,22 @@ fn pair_to_value(pair: Pair<Rule>) -> Value {
                 "nil" => Value::Nil,
                 "false" => Value::Bool(false),
                 "true" => Value::Bool(true),
-                _ => Value::Symbol(sym.to_owned())
+                _ => Value::Symbol(sym.to_owned()),
             }
-        },
+        }
         Rule::keyword => {
             let ksym = pair.as_str();
             Value::Keyword(ksym.to_owned())
-        },
+        }
         Rule::string => {
             let mut pair = pair.into_inner();
             let inner = pair.next().unwrap().as_str();
             Value::String(inner.to_owned())
-        },
+        }
         Rule::character => {
             dbg!(pair);
             unimplemented!()
-        },
+        }
         Rule::list => Value::List(pair.into_inner().map(pair_to_value).collect()),
         Rule::vector => Value::Vec(pair.into_inner().map(pair_to_value).collect()),
         // Rule::set => Value::Map(pair.into_inner().map(pair_to_value).collect()),
@@ -67,31 +68,41 @@ fn pair_to_value(pair: Pair<Rule>) -> Value {
             let mut pairs = pair.into_inner();
             let tag = pairs.next().unwrap().as_str().to_owned();
             let expr = pair_to_value(pairs.next().unwrap());
-            Value::TaggedElement(tag,Box::new(expr))
+            Value::TaggedElement(tag, Box::new(expr))
         }
-        _ => unimplemented!()
+        _ => unimplemented!(),
     }
 }
 
 fn main() {
-    // let file = fs::read_to_string("test/learnxiny.edn").expect("could not read file");
-    let file = "#_ (a b c)";
-    let parsed = EdnParser::parse(Rule::edn,&file).unwrap();
-    dbg!(&parsed);
-    for edn in parsed {
-        dbg!(pair_to_value(edn));
+    // // let file = fs::read_to_string("test/learnxiny.edn").expect("could not read file");
+    // let file = "#_ (a b c)";
+    // let parsed = EdnParser::parse(Rule::edn, &file).unwrap();
+    // dbg!(&parsed);
+    // for edn in parsed {
+    //     dbg!(pair_to_value(edn));
+    // }
+    loop {
+        print!("> ");
+        io::stdout().flush().unwrap();
+        let mut input = String::new();
+        io::stdin()
+            .read_line(&mut input)
+            .expect("Failed to read input");
+        let edn = edn_reader::read(input.trim().to_string());
+        dbg!(edn);
     }
 }
 
 #[cfg(test)]
 mod tests {
 
-    use std::{path::PathBuf, fs};
     use pest::error::Error;
+    use std::{fs, path::PathBuf};
     use walkdir::WalkDir;
-    
+
     use super::*;
-    
+
     const VALID_FOLDERS: [&str; 4] = [
         "./test",
         "./examples/edn-tests/valid-edn",
@@ -101,14 +112,12 @@ mod tests {
     const INVALID_FOLDERS: [&str; 1] = ["./examples/edn-tests/invalid-edn"];
 
     fn walk_dir(folders: Vec<&str>) -> Vec<(PathBuf, Result<(), Error<Rule>>)> {
-        let files = folders
-        .iter()
-        .flat_map(WalkDir::new)
-        .flatten();
+        let files = folders.iter().flat_map(WalkDir::new).flatten();
 
         let mut results = Vec::new();
         for entry in files {
-            if entry.file_type().is_file() && entry.path().extension().map_or(false, |e| e == "edn") {
+            if entry.file_type().is_file() && entry.path().extension().map_or(false, |e| e == "edn")
+            {
                 let file = fs::read_to_string(entry.path()).unwrap();
                 let parse_result = EdnParser::parse(Rule::edn, &file).map(|_| ());
                 results.push((entry.path().to_owned(), parse_result));
@@ -117,20 +126,20 @@ mod tests {
         results
     }
 
-    fn all_ok(results: impl Iterator<Item = (PathBuf, Result<(),Error<Rule>>)>) {
+    fn all_ok(results: impl Iterator<Item = (PathBuf, Result<(), Error<Rule>>)>) {
         let mut has_err = false;
         for (path, err) in results {
             if err.is_err() {
                 dbg!(path);
                 let err = err.unwrap_err();
-                println!("{}",err);
+                println!("{}", err);
                 has_err = true;
             }
         }
         assert!(!has_err)
     }
 
-    fn all_err(results: impl Iterator<Item= (PathBuf, Result<(),Error<Rule>>)>) {
+    fn all_err(results: impl Iterator<Item = (PathBuf, Result<(), Error<Rule>>)>) {
         let mut has_ok = false;
         for (path, err) in results {
             if err.is_ok() {
