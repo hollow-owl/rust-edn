@@ -63,10 +63,20 @@ lazy_static! {
     // };
 }
 
-pub fn read(s: String) -> Option<Edn> {
-    let s = s.clone();
+pub fn read_str(s: String) -> Option<Edn> {
     let mut reader = PushBackIterator::from(s.chars().into_iter());
+    let out = read(&mut reader, true, Edn::Nil, false);
+    dbg!(reader.collect::<String>());
+    out
+}
 
+pub fn read(
+    reader: &mut ReaderIter,
+    eof_is_error: bool,
+    eof_value: Edn,
+    is_recursive: bool,
+) -> Option<Edn> {
+    dbg!(reader.clone().collect::<String>());
     loop {
         // Skip whitespace
         while reader.peek().map(|&x| is_whitespace(x))? {
@@ -75,12 +85,13 @@ pub fn read(s: String) -> Option<Edn> {
         let ch = reader.next()?;
 
         if ch.is_digit(10) {
-            let n = read_number(&mut reader, ch);
+            let n = read_number(reader, ch);
             return Some(n);
         }
 
         if let Some(macro_) = MACROS.get(&ch) {
-            let ret = macro_(&mut reader, ch);
+            dbg!(ch);
+            let ret = macro_(reader, ch);
             if ret.is_none() {
                 continue;
             }
@@ -89,18 +100,18 @@ pub fn read(s: String) -> Option<Edn> {
 
         if ch == '+' || ch == '-' {
             if reader.peek()?.is_digit(10) {
-                let n = read_number(&mut reader, ch);
+                let n = read_number(reader, ch);
                 return Some(n);
             }
         }
 
-        let token = read_token(&mut reader, ch, true)?;
+        let token = read_token(reader, ch, true)?;
         return interpret_token(token);
     }
 }
 
 fn interpret_token(token: String) -> Option<Edn> {
-    Some(Edn::String(token))
+    todo!("Interpreting token")
 }
 
 // Readers
@@ -229,12 +240,22 @@ fn read_unicode_char(
     return char::from_u32(uc);
 }
 
-fn read_comment(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
-    Some(Nil)
+fn read_comment(reader: &mut ReaderIter, semicolon: char) -> Option<Edn> {
+    assert_eq!(semicolon, ';');
+    loop {
+        match reader.next() {
+            None => break,
+            Some(ch) if ch == '\n' || ch == '\r' => break,
+            _ => continue,
+        }
+    }
+    None
 }
 fn read_list(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
-    Some(Nil)
+    let list = read_delimited_list(')', reader, true);
+    return Some(Edn::List(list));
 }
+
 fn read_unmatched_delimiter(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
     Some(Nil)
 }
@@ -259,7 +280,7 @@ fn read_symbolic_value(reader: &mut ReaderIter, ch: char) -> Edn {
     Nil
 }
 fn read_meta(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
-    Some(Nil)
+    unimplemented!()
 }
 fn read_set(reader: &mut ReaderIter, ch: char) -> Edn {
     Nil
@@ -341,6 +362,32 @@ fn match_number(s: &str) -> Option<Edn> {
     None
 }
 
+fn read_delimited_list(delim: char, reader: &mut ReaderIter, is_recursive: bool) -> Vec<Edn> {
+    let mut list = Vec::new();
+    loop {
+        // Skip whitespace
+        while reader.peek().is_some_and(|&x| is_whitespace(x)) {
+            let _ = reader.next();
+        }
+        let ch = reader.peek();
+        match ch {
+            None => panic!("EOF while reading"),
+            Some(&ch) if ch == delim => break,
+            Some(&ch) => {
+                if let Some(macro_) = MACROS.get(&ch) {
+                    let _ = reader.next();
+                    let ret = macro_(reader, ch);
+                    if let Some(ret) = ret {
+                        list.push(ret);
+                    } else if let Some(o) = read(reader, true, Nil, is_recursive) {
+                        list.push(o)
+                    }
+                }
+            }
+        }
+    }
+    list
+}
 // Utils
 fn non_constituent(ch: char) -> bool {
     ch == '@' || ch == '`' || ch == '~'

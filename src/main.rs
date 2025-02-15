@@ -89,7 +89,7 @@ fn main() {
         io::stdin()
             .read_line(&mut input)
             .expect("Failed to read input");
-        let edn = edn_reader::read(input.trim().to_string());
+        let edn = edn_reader::read_str(input.trim().to_string());
         dbg!(edn);
     }
 }
