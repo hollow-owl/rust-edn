@@ -27,7 +27,7 @@ pub enum Edn {
 use Edn::{Char, Float, Int, Keyword, Nil, Symbol};
 
 type ReaderIter<'a> = PushBackIterator<Chars<'a>>;
-type Reader = fn(&mut ReaderIter, char) -> Edn;
+type Reader = fn(&mut ReaderIter, char) -> Option<Edn>;
 
 lazy_static! {
     static ref symbolPat: Regex = Regex::new("[:]?([\\D&&[^/]].*/)?(/|[\\D&&[^/]][^/]*)").unwrap();
@@ -50,17 +50,17 @@ lazy_static! {
         macros.insert('#', read_dispatch as Reader);
         macros
     };
-    static ref DISPATCH_MACROS: HashMap<char, Reader> = {
-        let mut map = HashMap::new();
-        map.insert('#', read_symbolic as Reader);
-        map.insert('#', read_symbolic_value as Reader);
-        map.insert('^', read_meta as Reader);
-        map.insert('{', read_set as Reader);
-        map.insert('<', read_unreadable as Reader);
-        map.insert('_', read_discard as Reader);
-        map.insert(':', read_namespace_map as Reader);
-        map
-    };
+    // static ref DISPATCH_MACROS: HashMap<char, Reader> = {
+    //     let mut map = HashMap::new();
+    //     map.insert('#', read_symbolic as Reader);
+    //     map.insert('#', read_symbolic_value as Reader);
+    //     map.insert('^', read_meta as Reader);
+    //     map.insert('{', read_set as Reader);
+    //     map.insert('<', read_unreadable as Reader);
+    //     map.insert('_', read_discard as Reader);
+    //     map.insert(':', read_namespace_map as Reader);
+    //     map
+    // };
 }
 
 pub fn read(s: String) -> Option<Edn> {
@@ -81,9 +81,10 @@ pub fn read(s: String) -> Option<Edn> {
 
         if let Some(macro_) = MACROS.get(&ch) {
             let ret = macro_(&mut reader, ch);
-            // if macro is noop
-            continue;
-            // return Some(ret);
+            if ret.is_none() {
+                continue;
+            }
+            return ret;
         }
 
         if ch == '+' || ch == '-' {
@@ -146,30 +147,108 @@ fn read_token(reader: &mut ReaderIter, ch: char, lead_constituent: bool) -> Opti
 }
 
 // Macros
-fn read_string(reader: &mut ReaderIter, ch: char) -> Edn {
-    Nil
+fn read_string(reader: &mut ReaderIter, double_quote: char) -> Option<Edn> {
+    if double_quote != '"' {
+        unreachable!("Started reading string with {double_quote} but it should always be a \"");
+    }
+
+    let mut out = String::new();
+    loop {
+        let ch = match reader.next().expect("EOF while reading string") {
+            '"' => break,
+            '\\' => {
+                // escape
+                match reader.next().expect("EOF while reading string") {
+                    't' => '\t',
+                    'r' => '\r',
+                    'n' => '\n',
+                    '\\' => '\\',
+                    'b' => '\u{08}',
+                    'f' => '\u{0C}',
+                    'u' => {
+                        let ch = reader.next().unwrap();
+                        if !ch.is_digit(16) {
+                            panic!("Unvalid unicode escape: \\u{ch}");
+                        }
+                        read_unicode_char(reader, ch, 16, 4, true).unwrap()
+                    }
+                    ch => {
+                        if ch.is_digit(10) {
+                            let ch = read_unicode_char(reader, ch, 8, 3, false).unwrap();
+                            if (ch as u32) > 0o377 {
+                                panic!("Octal escape sequence must be in range [0, 377].")
+                            }
+                            ch
+                        } else {
+                            panic!("Unsupported escape character: \\{ch}");
+                        }
+                    }
+                }
+            }
+            ch => ch,
+        };
+        out.push(ch);
+    }
+    return Some(Edn::String(out));
 }
 
-fn read_comment(reader: &mut ReaderIter, ch: char) -> Edn {
-    Nil
+fn read_unicode_char(
+    reader: &mut ReaderIter,
+    ch: char,
+    base: u32,
+    length: i32,
+    exact: bool,
+) -> Option<char> {
+    let mut uc = {
+        let uc = ch.to_digit(base);
+        if let None = uc {
+            panic!("Invalid digit: {ch}");
+        }
+        uc.unwrap()
+    };
+    let mut i = 0;
+    for curr in 0..length {
+        i = curr;
+        let ch = reader.peek();
+        match ch {
+            None => break,
+            Some(&ch) if is_whitespace(ch) || is_macro(ch) => break,
+            Some(&ch) => {
+                let _ = reader.next();
+                let d = ch.to_digit(base);
+                match d {
+                    None => panic!("Invalid digit: {ch}"),
+                    Some(d) => uc = uc * base + d,
+                }
+            }
+        }
+    }
+    if i != length && exact {
+        panic!("Invalid character length: {i}, should be: {length}");
+    }
+    return char::from_u32(uc);
 }
-fn read_list(reader: &mut ReaderIter, ch: char) -> Edn {
-    Nil
+
+fn read_comment(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+    Some(Nil)
 }
-fn read_unmatched_delimiter(reader: &mut ReaderIter, ch: char) -> Edn {
-    Nil
+fn read_list(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+    Some(Nil)
 }
-fn read_vector(reader: &mut ReaderIter, ch: char) -> Edn {
-    Nil
+fn read_unmatched_delimiter(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+    Some(Nil)
 }
-fn read_map(reader: &mut ReaderIter, ch: char) -> Edn {
-    Nil
+fn read_vector(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+    Some(Nil)
 }
-fn read_character(reader: &mut ReaderIter, ch: char) -> Edn {
-    Nil
+fn read_map(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+    Some(Nil)
 }
-fn read_dispatch(reader: &mut ReaderIter, ch: char) -> Edn {
-    Nil
+fn read_character(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+    Some(Nil)
+}
+fn read_dispatch(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+    Some(Nil)
 }
 
 // Dispatch Macros
@@ -179,8 +258,8 @@ fn read_symbolic(reader: &mut ReaderIter, ch: char) -> Edn {
 fn read_symbolic_value(reader: &mut ReaderIter, ch: char) -> Edn {
     Nil
 }
-fn read_meta(reader: &mut ReaderIter, ch: char) -> Edn {
-    Nil
+fn read_meta(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+    Some(Nil)
 }
 fn read_set(reader: &mut ReaderIter, ch: char) -> Edn {
     Nil
