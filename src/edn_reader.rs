@@ -31,9 +31,9 @@ type Reader = fn(&mut ReaderIter, char) -> Option<Edn>;
 
 lazy_static! {
     static ref symbolPat: Regex = Regex::new("[:]?([\\D&&[^/]].*/)?(/|[\\D&&[^/]][^/]*)").unwrap();
-    static ref intPat: Regex = Regex::new("^([-+]?)(?:(0)|([1-9][0-9]*)|0[xX]([0-9A-Fa-f]+)|0([0-7]+)|([1-9][0-9]?)[rR]([0-9A-Za-z]+)|0[0-9]+)(N)?$").unwrap();
-    static ref ratioPat: Regex = Regex::new("^([-+]?[0-9]+)/([0-9]+)$").unwrap();
-    static ref floatPat: Regex = Regex::new("^([-+]?[0-9]+(\\.[0-9]*)?([eE][-+]?[0-9]+)?)(M)?$").unwrap();
+    static ref intPat: Regex = Regex::new("^([-+]?)(?:(0)|([1-9][0-9]*)|0[xX]([0-9A-Fa-f]+)|0([0-7]+)|([1-9][0-9]?)[rR]([0-9A-Za-z]+)|0[0-9]+)(N)?").unwrap();
+    static ref ratioPat: Regex = Regex::new("^([-+]?[0-9]+)/([0-9]+)").unwrap();
+    static ref floatPat: Regex = Regex::new("^([-+]?[0-9]+(\\.[0-9]*)?([eE][-+]?[0-9]+)?)(M)?").unwrap();
 
     static ref MACROS: HashMap<char, Reader> = {
         let mut macros = HashMap::new();
@@ -76,8 +76,8 @@ pub fn read(
     eof_value: Edn,
     is_recursive: bool,
 ) -> Option<Edn> {
-    dbg!(reader.clone().collect::<String>());
     loop {
+        dbg!(reader.clone().collect::<String>());
         // Skip whitespace
         while reader.peek().map(|&x| is_whitespace(x))? {
             let _ = reader.next()?;
@@ -92,6 +92,7 @@ pub fn read(
         if let Some(macro_) = MACROS.get(&ch) {
             dbg!(ch);
             let ret = macro_(reader, ch);
+            dbg!(&ret);
             if ret.is_none() {
                 continue;
             }
@@ -122,7 +123,7 @@ fn read_number(reader: &mut ReaderIter, ch: char) -> Edn {
     loop {
         match reader.peek() {
             None => break,
-            Some(&ch) if is_whitespace(ch) && is_macro(ch) => break,
+            Some(&ch) if is_whitespace(ch) || is_macro(ch) => break,
             Some(&ch) => {
                 s.push(ch);
                 let _ = reader.next();
@@ -365,6 +366,7 @@ fn match_number(s: &str) -> Option<Edn> {
 fn read_delimited_list(delim: char, reader: &mut ReaderIter, is_recursive: bool) -> Vec<Edn> {
     let mut list = Vec::new();
     loop {
+        dbg!(reader.clone().collect::<String>());
         // Skip whitespace
         while reader.peek().is_some_and(|&x| is_whitespace(x)) {
             let _ = reader.next();
@@ -379,9 +381,11 @@ fn read_delimited_list(delim: char, reader: &mut ReaderIter, is_recursive: bool)
                     let ret = macro_(reader, ch);
                     if let Some(ret) = ret {
                         list.push(ret);
-                    } else if let Some(o) = read(reader, true, Nil, is_recursive) {
-                        list.push(o)
                     }
+                } else if let Some(o) = read(reader, true, Nil, is_recursive) {
+                    dbg!(&o);
+                    dbg!(reader.clone().collect::<String>());
+                    list.push(o)
                 }
             }
         }
