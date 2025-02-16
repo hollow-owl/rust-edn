@@ -258,17 +258,45 @@ fn read_list(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
 }
 
 fn read_unmatched_delimiter(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
-    Some(Nil)
+    panic!("Unmatched Delimiter: {ch}");
 }
 fn read_vector(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
-    Some(Nil)
+    let vec = read_delimited_list(']', reader, true);
+    return Some(Edn::Vec(vec));
 }
 fn read_map(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
-    Some(Nil)
+    todo!("Make Edn hashable");
 }
-fn read_character(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
-    Some(Nil)
+
+fn read_character(reader: &mut ReaderIter, backslash: char) -> Option<Edn> {
+    assert_eq!(backslash, '\\');
+    let token = reader.next().and_then(|x| read_token(reader, x, false));
+    let c = match token.as_deref() {
+        Some(t) if t.len() == 1 => t.chars().next().unwrap(),
+        Some("newline") => '\n',
+        Some("tab") => '\t',
+        Some("backspace") => '\u{08}',
+        Some("formfeed") => '\u{0C}',
+        Some("return") => '\r',
+        Some(t) if t.starts_with("u") => {
+            let c = read_unicode_char_from_token(t, 1, 4, 16);
+            match c {
+                None => panic!("Invalid character constant: \\{t}"),
+                Some(c) if (c as u32) >= 0xD800 && (c as u32) <= 0xDFFF => {
+                    panic!("Invalid character constant: \\u{c}")
+                }
+                Some(c) => c,
+            }
+        }
+        Some(t) if t.starts_with("o") => {
+            todo!()
+        }
+        Some(t) => panic!("Unsupported character: \\{t}"),
+        None => panic!("Unsupported character: \\ TODO"),
+    };
+    Some(Char(c))
 }
+
 fn read_dispatch(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
     Some(Nil)
 }
@@ -391,6 +419,29 @@ fn read_delimited_list(delim: char, reader: &mut ReaderIter, is_recursive: bool)
         }
     }
     list
+}
+
+fn read_unicode_char_from_token(
+    token: &str,
+    offset: usize,
+    length: usize,
+    base: u32,
+) -> Option<char> {
+    if token.len() != offset + length {
+        panic!("Invalid unicode character: \\{token}");
+    }
+
+    let mut uc = 0;
+    for d in token.chars().skip(offset) {
+        match d.to_digit(base) {
+            None => panic!("Invalid digit: {d}"),
+            Some(d) => {
+                uc = uc * base + d;
+            }
+        }
+    }
+
+    char::from_u32(uc)
 }
 // Utils
 fn non_constituent(ch: char) -> bool {
