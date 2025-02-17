@@ -96,7 +96,7 @@ fn repl() {
         io::stdin()
             .read_line(&mut input)
             .expect("Failed to read input");
-        if is_match(&input) {
+        if is_match(input.trim()) {
             println!("Match");
         } else {
             println!("ERROR: {input} does not match")
@@ -169,8 +169,8 @@ fn clojure_edn(input: &str) -> Option<String> {
 }
 
 fn main() {
-    repl();
-    // test_file("test/learnxiny.edn");
+    // repl();
+    test_file("test/learnxiny.edn");
 }
 
 #[cfg(test)]

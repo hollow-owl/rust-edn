@@ -70,7 +70,7 @@ lazy_static! {
 pub fn read_str(s: String) -> Option<Edn> {
     let mut reader = PushBackIterator::from(s.chars().into_iter());
     let out = read(&mut reader, true, Edn::Nil, false);
-    dbg!(reader.collect::<String>());
+    // dbg!(reader.collect::<String>());
     out
 }
 
@@ -81,7 +81,7 @@ pub fn read(
     is_recursive: bool,
 ) -> Option<Edn> {
     loop {
-        dbg!(reader.clone().collect::<String>());
+        // dbg!(reader.clone().collect::<String>());
         // Skip whitespace
         while reader.peek().map(|&x| is_whitespace(x))? {
             let _ = reader.next()?;
@@ -94,9 +94,9 @@ pub fn read(
         }
 
         if let Some(macro_) = MACROS.get(&ch) {
-            dbg!(ch);
+            // dbg!(ch);
             let ret = macro_(reader, ch);
-            dbg!(&ret);
+            // dbg!(&ret);
             if ret.is_none() {
                 continue;
             }
@@ -116,7 +116,7 @@ pub fn read(
 }
 
 fn interpret_token(token: String) -> Option<Edn> {
-    dbg!(&token);
+    // dbg!(&token);
     match token.as_str() {
         "nil" => Some(Nil),
         "true" => Some(Bool(true)),
@@ -307,7 +307,7 @@ fn read_vector(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
     return Some(Edn::Vec(vec));
 }
 fn read_map(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
-    todo!("Make Edn hashable");
+    panic!("Make Edn hashable");
 }
 
 fn read_character(reader: &mut ReaderIter, backslash: char) -> Option<Edn> {
@@ -468,7 +468,7 @@ fn match_number(s: &str) -> Option<Edn> {
 fn read_delimited_list(delim: char, reader: &mut ReaderIter, is_recursive: bool) -> Vec<Edn> {
     let mut list = Vec::new();
     loop {
-        dbg!(reader.clone().collect::<String>());
+        // dbg!((delim, reader.clone().collect::<String>()));
         // Skip whitespace
         while reader.peek().is_some_and(|&x| is_whitespace(x)) {
             let _ = reader.next();
@@ -476,7 +476,10 @@ fn read_delimited_list(delim: char, reader: &mut ReaderIter, is_recursive: bool)
         let ch = reader.peek();
         match ch {
             None => panic!("EOF while reading"),
-            Some(&ch) if ch == delim => break,
+            Some(&ch) if ch == delim => {
+                let _ = reader.next();
+                break;
+            }
             Some(&ch) => {
                 if let Some(macro_) = MACROS.get(&ch) {
                     let _ = reader.next();
@@ -485,8 +488,8 @@ fn read_delimited_list(delim: char, reader: &mut ReaderIter, is_recursive: bool)
                         list.push(ret);
                     }
                 } else if let Some(o) = read(reader, true, Nil, is_recursive) {
-                    dbg!(&o);
-                    dbg!(reader.clone().collect::<String>());
+                    // dbg!(&o);
+                    // dbg!(reader.clone().collect::<String>());
                     list.push(o)
                 }
             }
