@@ -1,17 +1,18 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, BTreeSet, HashMap},
     f64::{INFINITY, NAN, NEG_INFINITY},
     str::Chars,
 };
 
 use bigdecimal::BigDecimal;
 use lazy_static::lazy_static;
-use num::{BigInt, BigRational, Num, ToPrimitive};
+use num::{BigInt, BigRational, Integer, Num, ToPrimitive};
+use ordered_float::OrderedFloat;
 use pushback_iter::PushBackIterator;
 use regex::Regex;
 use std::str::FromStr;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Hash)]
 pub enum Edn {
     Nil,
     Bool(bool),
@@ -21,14 +22,16 @@ pub enum Edn {
     Keyword(String),
     Int(i64),
     BigInt(BigInt),
-    Float(f64),
+    Float(OrderedFloat<f64>),
     BigDecimal(BigDecimal),
     BigRational(BigRational),
     List(Vec<Edn>),
     Vec(Vec<Edn>),
+    Set(BTreeSet<Edn>),
+    Map(BTreeMap<Edn, Edn>),
     TaggedElement(String, Box<Edn>),
 }
-use Edn::{Bool, Char, Float, Int, Keyword, Nil, Symbol};
+use Edn::{Bool, Char, Float, Int, Keyword, Map, Nil, Set, Symbol, TaggedElement};
 
 type ReaderIter<'a> = PushBackIterator<Chars<'a>>;
 type Reader = fn(&mut ReaderIter, char) -> Option<Edn>;
@@ -70,7 +73,6 @@ lazy_static! {
 pub fn read_str(s: String) -> Option<Edn> {
     let mut reader = PushBackIterator::from(s.chars().into_iter());
     let out = read(&mut reader, true, Edn::Nil, false);
-    // dbg!(reader.collect::<String>());
     out
 }
 
@@ -94,9 +96,7 @@ pub fn read(
         }
 
         if let Some(macro_) = MACROS.get(&ch) {
-            // dbg!(ch);
             let ret = macro_(reader, ch);
-            // dbg!(&ret);
             if ret.is_none() {
                 continue;
             }
@@ -116,7 +116,6 @@ pub fn read(
 }
 
 fn interpret_token(token: String) -> Option<Edn> {
-    // dbg!(&token);
     match token.as_str() {
         "nil" => Some(Nil),
         "true" => Some(Bool(true)),
@@ -307,7 +306,17 @@ fn read_vector(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
     return Some(Edn::Vec(vec));
 }
 fn read_map(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
-    panic!("Make Edn hashable");
+    assert_eq!(ch, '{');
+    let vec = read_delimited_list('}', reader, true);
+    if vec.len().is_odd() {
+        panic!("Map literal must contain an even number of forms");
+    } else {
+        let map = vec
+            .chunks_exact(2)
+            .map(|chunk| (chunk[0].clone(), chunk[1].clone()))
+            .collect();
+        Some(Map(map))
+    }
 }
 
 fn read_character(reader: &mut ReaderIter, backslash: char) -> Option<Edn> {
@@ -341,20 +350,24 @@ fn read_character(reader: &mut ReaderIter, backslash: char) -> Option<Edn> {
 
 fn read_dispatch(reader: &mut ReaderIter, hash: char) -> Option<Edn> {
     assert_eq!(hash, '#');
-    let ch = reader.peek();
-    match ch {
-        None => panic!("EOF while reading character"),
-        Some(ch) => {
-            if let Some(macro_) = DISPATCH_MACROS.get(ch) {
-                let ch = reader.next().unwrap();
-                return macro_(reader, ch);
-            } else {
-                if ch.is_alphabetic() {
-                    todo!("Tagged reader")
-                }
-                panic!("No dispatch macro for: {ch}")
-            }
-        }
+    let ch = *reader.peek().expect("EOF while reading character");
+    if let Some(macro_) = DISPATCH_MACROS.get(&ch) {
+        let ch = reader.next().unwrap();
+        return macro_(reader, ch);
+    } else if ch.is_alphabetic() {
+        return read_tagged(reader, ch);
+    } else {
+        panic!("No dispatch macro for: {ch}")
+    }
+}
+
+fn read_tagged(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+    let name = read(reader, true, Nil, false)?;
+    if let Symbol(name) = name {
+        let o = read(reader, true, Nil, true)?;
+        Some(TaggedElement(name, Box::new(o)))
+    } else {
+        panic!("Reader tag must be a symbol");
     }
 }
 
@@ -364,9 +377,9 @@ fn read_symbolic_value(reader: &mut ReaderIter, quote: char) -> Option<Edn> {
     let edn = read(reader, true, Nil, true)?;
     let out = match edn {
         Symbol(s) => match s.as_ref() {
-            "Inf" => Edn::Float(INFINITY),
-            "-Inf" => Edn::Float(NEG_INFINITY),
-            "NaN" => Edn::Float(NAN),
+            "Inf" => Edn::Float(INFINITY.into()),
+            "-Inf" => Edn::Float(NEG_INFINITY.into()),
+            "NaN" => Edn::Float(NAN.into()),
             _ => panic!("Unkown symbolic value: ##{s}"),
         },
         _ => panic!("Invalid token: ##{edn:?}"),
@@ -381,7 +394,8 @@ fn read_meta(reader: &mut ReaderIter, carrot: char) -> Option<Edn> {
 
 fn read_set(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
     assert_eq!(ch, '{');
-    todo!("Make hashable");
+    let vec = read_delimited_list('}', reader, true);
+    Some(Set(vec.into_iter().collect()))
 }
 
 fn read_unreadable(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
@@ -407,7 +421,7 @@ fn match_number(s: &str) -> Option<Edn> {
             if caps.get(8).is_some() {
                 return Some(Edn::String("BigInt.ZERO".to_string()));
             } else {
-                return Some(Edn::Int(0));
+                return Some(Int(0));
             }
         }
         let negate = caps.get(1).unwrap().as_str() == "-";
@@ -441,7 +455,7 @@ fn match_number(s: &str) -> Option<Edn> {
             return Some(Edn::BigInt(bn));
         }
         if let Some(n) = bn.to_i64() {
-            return Some(Edn::Int(n));
+            return Some(Int(n));
         } else {
             return Some(Edn::BigInt(bn));
         }
@@ -468,7 +482,6 @@ fn match_number(s: &str) -> Option<Edn> {
 fn read_delimited_list(delim: char, reader: &mut ReaderIter, is_recursive: bool) -> Vec<Edn> {
     let mut list = Vec::new();
     loop {
-        // dbg!((delim, reader.clone().collect::<String>()));
         // Skip whitespace
         while reader.peek().is_some_and(|&x| is_whitespace(x)) {
             let _ = reader.next();
@@ -488,8 +501,6 @@ fn read_delimited_list(delim: char, reader: &mut ReaderIter, is_recursive: bool)
                         list.push(ret);
                     }
                 } else if let Some(o) = read(reader, true, Nil, is_recursive) {
-                    // dbg!(&o);
-                    // dbg!(reader.clone().collect::<String>());
                     list.push(o)
                 }
             }
