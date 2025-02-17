@@ -1,4 +1,8 @@
-use std::{collections::HashMap, str::Chars};
+use std::{
+    collections::HashMap,
+    f64::{INFINITY, NAN, NEG_INFINITY},
+    str::Chars,
+};
 
 use bigdecimal::BigDecimal;
 use lazy_static::lazy_static;
@@ -24,13 +28,14 @@ pub enum Edn {
     Vec(Vec<Edn>),
     TaggedElement(String, Box<Edn>),
 }
-use Edn::{Char, Float, Int, Keyword, Nil, Symbol};
+use Edn::{Bool, Char, Float, Int, Keyword, Nil, Symbol};
 
 type ReaderIter<'a> = PushBackIterator<Chars<'a>>;
 type Reader = fn(&mut ReaderIter, char) -> Option<Edn>;
 
 lazy_static! {
     static ref symbolPat: Regex = Regex::new("[:]?([\\D&&[^/]].*/)?(/|[\\D&&[^/]][^/]*)").unwrap();
+    // static ref symbolPat: Regex = Regex::new(r"[:]?((?:[^0-9/].*/)?(/|[^0-9/][^/]*))").unwrap();
     static ref intPat: Regex = Regex::new("^([-+]?)(?:(0)|([1-9][0-9]*)|0[xX]([0-9A-Fa-f]+)|0([0-7]+)|([1-9][0-9]?)[rR]([0-9A-Za-z]+)|0[0-9]+)(N)?").unwrap();
     static ref ratioPat: Regex = Regex::new("^([-+]?[0-9]+)/([0-9]+)").unwrap();
     static ref floatPat: Regex = Regex::new("^([-+]?[0-9]+(\\.[0-9]*)?([eE][-+]?[0-9]+)?)(M)?").unwrap();
@@ -50,17 +55,16 @@ lazy_static! {
         macros.insert('#', read_dispatch as Reader);
         macros
     };
-    // static ref DISPATCH_MACROS: HashMap<char, Reader> = {
-    //     let mut map = HashMap::new();
-    //     map.insert('#', read_symbolic as Reader);
-    //     map.insert('#', read_symbolic_value as Reader);
-    //     map.insert('^', read_meta as Reader);
-    //     map.insert('{', read_set as Reader);
-    //     map.insert('<', read_unreadable as Reader);
-    //     map.insert('_', read_discard as Reader);
-    //     map.insert(':', read_namespace_map as Reader);
-    //     map
-    // };
+    static ref DISPATCH_MACROS: HashMap<char, Reader> = {
+        let mut map = HashMap::new();
+        map.insert('#', read_symbolic_value as Reader);
+        map.insert('^', read_meta as Reader);
+        map.insert('{', read_set as Reader);
+        map.insert('<', read_unreadable as Reader);
+        map.insert('_', read_discard as Reader);
+        map.insert(':', read_namespace_map as Reader);
+        map
+    };
 }
 
 pub fn read_str(s: String) -> Option<Edn> {
@@ -112,7 +116,45 @@ pub fn read(
 }
 
 fn interpret_token(token: String) -> Option<Edn> {
-    todo!("Interpreting token")
+    dbg!(&token);
+    match token.as_str() {
+        "nil" => Some(Nil),
+        "true" => Some(Bool(true)),
+        "false" => Some(Bool(false)),
+        s => {
+            let ret = match_symbol(s);
+            match ret {
+                Some(sym) => Some(sym),
+                None => panic!("Invalid token: {s}"),
+            }
+        }
+    }
+}
+
+fn match_symbol(s: &str) -> Option<Edn> {
+    let caps = symbolPat.captures(s);
+    if let Some(caps) = caps {
+        let ns = caps.get(1);
+        let name = caps.get(2).unwrap().as_str();
+        if ns.is_some_and(|ns| ns.as_str().ends_with(":/"))
+            || name.ends_with(":")
+            || s[1..].contains("::")
+        {
+            return None;
+        }
+        if s.starts_with("::") {
+            return None;
+        }
+        let is_keyword = s.starts_with(":");
+        let sym = s[if is_keyword { 1 } else { 0 }..].to_string();
+        if is_keyword {
+            return Some(Keyword(sym));
+        } else {
+            return Some(Symbol(sym));
+        }
+    } else {
+        return None;
+    }
 }
 
 // Readers
@@ -297,31 +339,63 @@ fn read_character(reader: &mut ReaderIter, backslash: char) -> Option<Edn> {
     Some(Char(c))
 }
 
-fn read_dispatch(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
-    Some(Nil)
+fn read_dispatch(reader: &mut ReaderIter, hash: char) -> Option<Edn> {
+    assert_eq!(hash, '#');
+    let ch = reader.peek();
+    match ch {
+        None => panic!("EOF while reading character"),
+        Some(ch) => {
+            if let Some(macro_) = DISPATCH_MACROS.get(ch) {
+                let ch = reader.next().unwrap();
+                return macro_(reader, ch);
+            } else {
+                if ch.is_alphabetic() {
+                    todo!("Tagged reader")
+                }
+                panic!("No dispatch macro for: {ch}")
+            }
+        }
+    }
 }
 
 // Dispatch Macros
-fn read_symbolic(reader: &mut ReaderIter, ch: char) -> Edn {
-    Nil
+fn read_symbolic_value(reader: &mut ReaderIter, quote: char) -> Option<Edn> {
+    assert_eq!(quote, '#');
+    let edn = read(reader, true, Nil, true)?;
+    let out = match edn {
+        Symbol(s) => match s.as_ref() {
+            "Inf" => Edn::Float(INFINITY),
+            "-Inf" => Edn::Float(NEG_INFINITY),
+            "NaN" => Edn::Float(NAN),
+            _ => panic!("Unkown symbolic value: ##{s}"),
+        },
+        _ => panic!("Invalid token: ##{edn:?}"),
+    };
+    Some(out)
 }
-fn read_symbolic_value(reader: &mut ReaderIter, ch: char) -> Edn {
-    Nil
+
+fn read_meta(reader: &mut ReaderIter, carrot: char) -> Option<Edn> {
+    assert_eq!(carrot, '^');
+    unimplemented!("Metadata");
 }
-fn read_meta(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
-    unimplemented!()
+
+fn read_set(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+    assert_eq!(ch, '{');
+    todo!("Make hashable");
 }
-fn read_set(reader: &mut ReaderIter, ch: char) -> Edn {
-    Nil
+
+fn read_unreadable(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+    panic!("Unreadable form");
 }
-fn read_unreadable(reader: &mut ReaderIter, ch: char) -> Edn {
-    Nil
+
+fn read_discard(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+    assert_eq!(ch, '_');
+    read(reader, true, Nil, true);
+    None
 }
-fn read_discard(reader: &mut ReaderIter, ch: char) -> Edn {
-    Nil
-}
-fn read_namespace_map(reader: &mut ReaderIter, ch: char) -> Edn {
-    Nil
+
+fn read_namespace_map(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+    todo!("Make hashable");
 }
 
 // Matches
