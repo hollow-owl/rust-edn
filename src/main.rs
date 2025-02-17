@@ -1,5 +1,9 @@
 mod edn_reader;
-use std::io::{self, Write};
+use std::{
+    fs,
+    io::{self, Read, Write},
+    process::{Command, Stdio},
+};
 
 use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
@@ -74,14 +78,17 @@ fn pair_to_value(pair: Pair<Rule>) -> Value {
     }
 }
 
-fn main() {
-    // // let file = fs::read_to_string("test/learnxiny.edn").expect("could not read file");
-    // let file = "#_ (a b c)";
-    // let parsed = EdnParser::parse(Rule::edn, &file).unwrap();
-    // dbg!(&parsed);
-    // for edn in parsed {
-    //     dbg!(pair_to_value(edn));
-    // }
+fn pest_edn() {
+    let file = fs::read_to_string("test/learnxiny.edn").expect("could not read file");
+    let file = "#_ (a b c)";
+    let parsed = EdnParser::parse(Rule::edn, &file).unwrap();
+    dbg!(&parsed);
+    for edn in parsed {
+        dbg!(pair_to_value(edn));
+    }
+}
+
+fn repl() {
     loop {
         print!("> ");
         io::stdout().flush().unwrap();
@@ -89,9 +96,81 @@ fn main() {
         io::stdin()
             .read_line(&mut input)
             .expect("Failed to read input");
-        let edn = edn_reader::read_str(input.trim().to_string());
-        dbg!(edn);
+        if is_match(&input) {
+            println!("Match");
+        } else {
+            println!("ERROR: {input} does not match")
+        }
     }
+}
+
+fn test_file(path: &str) {
+    let file = fs::read_to_string(path).expect("could not read file");
+    if is_match(file.trim()) {
+        println!("Match");
+    } else {
+        println!("ERROR: File {path} does not match")
+    }
+}
+
+fn is_match(input: &str) -> bool {
+    let input = input.trim().to_owned();
+    let clojure_edn = clojure_edn(input.as_str());
+    let edn = edn_reader::read_str(input);
+    dbg!(&edn);
+    matches!((clojure_edn, edn), (Some(_), Some(_)) | (None, None))
+}
+
+fn clojure_edn(input: &str) -> Option<String> {
+    let mut child = Command::new("clojure")
+        .arg("-M")
+        .arg("-e")
+        .arg("(clojure.edn/read *in*)")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to start Clojure Process");
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(input.as_bytes())
+            .expect("Failed to write to stdin");
+    }
+
+    let mut output = String::new();
+    if let Some(mut stdout) = child.stdout.take() {
+        stdout
+            .read_to_string(&mut output)
+            .expect("Failed to read stdout");
+    }
+
+    let mut err = String::new();
+    if let Some(mut stderr) = child.stderr.take() {
+        stderr
+            .read_to_string(&mut err)
+            .expect("Failed to read stderr");
+    }
+    err = err
+        .strip_prefix(
+            "Picked up _JAVA_OPTIONS: -Djava.util.prefs.userRoot=/home/user/.config/java\n",
+        )
+        .expect("Missing java stuff")
+        .to_string();
+    // dbg!((&input, &output, &err));
+    if !err.is_empty() {
+        dbg!(err);
+        // todo!("Error messages");
+        None
+    } else {
+        dbg!(&output);
+        Some(output)
+    }
+}
+
+fn main() {
+    repl();
+    // test_file("test/learnxiny.edn");
 }
 
 #[cfg(test)]

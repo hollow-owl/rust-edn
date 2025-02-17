@@ -34,7 +34,7 @@ type ReaderIter<'a> = PushBackIterator<Chars<'a>>;
 type Reader = fn(&mut ReaderIter, char) -> Option<Edn>;
 
 lazy_static! {
-    static ref symbolPat: Regex = Regex::new("[:]?([\\D&&[^/]].*/)?(/|[\\D&&[^/]][^/]*)").unwrap();
+    static ref symbolPat: Regex = Regex::new("^[:]?([\\D&&[^/]].*/)?(/|[\\D&&[^/]][^/]*)").unwrap();
     // static ref symbolPat: Regex = Regex::new(r"[:]?((?:[^0-9/].*/)?(/|[^0-9/][^/]*))").unwrap();
     static ref intPat: Regex = Regex::new("^([-+]?)(?:(0)|([1-9][0-9]*)|0[xX]([0-9A-Fa-f]+)|0([0-7]+)|([1-9][0-9]?)[rR]([0-9A-Za-z]+)|0[0-9]+)(N)?").unwrap();
     static ref ratioPat: Regex = Regex::new("^([-+]?[0-9]+)/([0-9]+)").unwrap();
