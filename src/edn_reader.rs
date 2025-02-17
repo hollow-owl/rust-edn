@@ -190,7 +190,7 @@ fn read_token(reader: &mut ReaderIter, ch: char, lead_constituent: bool) -> Opti
         let ch = reader.peek();
         match ch {
             None => return Some(out),
-            Some(&ch) if is_whitespace(ch) && is_terminating_macro(ch) => return Some(out),
+            Some(&ch) if is_whitespace(ch) || is_terminating_macro(ch) => return Some(out),
             Some(&ch) if non_constituent(ch) => panic!("Invalid contituent character: {ch}"),
             Some(&ch) => {
                 out.push(ch);
