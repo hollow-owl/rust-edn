@@ -84,7 +84,6 @@ dependencies = [
  "ordered-float",
  "pest",
  "pest_derive",
- "pushback-iter",
  "regex",
  "serde",
  "walkdir",
@@ -265,12 +264,6 @@ checksum = "60946a68e5f9d28b0dc1c21bb8a97ee7d018a8b322fa57838ba31cc878e22d99"
 dependencies = [
  "unicode-ident",
 ]
-
-[[package]]
-name = "pushback-iter"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c29aca801c6a55e9c02e22f55f70a756294e9da2acb57c4da733c69e9889467"
 
 [[package]]
 name = "quote"

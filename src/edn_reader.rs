@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     f64::{INFINITY, NAN, NEG_INFINITY},
+    iter::Peekable,
     str::Chars,
 };
 
@@ -8,7 +9,6 @@ use bigdecimal::BigDecimal;
 use lazy_static::lazy_static;
 use num::{BigInt, BigRational, Integer, Num, ToPrimitive};
 use ordered_float::OrderedFloat;
-use pushback_iter::PushBackIterator;
 use regex::Regex;
 use std::str::FromStr;
 
@@ -33,8 +33,9 @@ pub enum Edn {
 }
 use Edn::{Bool, Char, Float, Int, Keyword, Map, Nil, Set, Symbol, TaggedElement};
 
-type ReaderIter<'a> = PushBackIterator<Chars<'a>>;
-type Reader = fn(&mut ReaderIter, char) -> Option<Edn>;
+type ReaderIter<'a> = Peekable<Chars<'a>>;
+type EdnRet = Option<Edn>;
+type Reader = fn(&mut ReaderIter, char) -> EdnRet;
 
 lazy_static! {
     static ref symbolPat: Regex = Regex::new("^[:]?([\\D&&[^/]].*/)?(/|[\\D&&[^/]][^/]*)").unwrap();
@@ -70,8 +71,8 @@ lazy_static! {
     };
 }
 
-pub fn read_str(s: String) -> Option<Edn> {
-    let mut reader = PushBackIterator::from(s.chars().into_iter());
+pub fn read_str(s: String) -> EdnRet {
+    let mut reader = s.chars().peekable();
     let out = read(&mut reader, true, Edn::Nil, false);
     out
 }
@@ -81,7 +82,7 @@ pub fn read(
     eof_is_error: bool,
     eof_value: Edn,
     is_recursive: bool,
-) -> Option<Edn> {
+) -> EdnRet {
     loop {
         // dbg!(reader.clone().collect::<String>());
         // Skip whitespace
@@ -115,7 +116,7 @@ pub fn read(
     }
 }
 
-fn interpret_token(token: String) -> Option<Edn> {
+fn interpret_token(token: String) -> EdnRet {
     match token.as_str() {
         "nil" => Some(Nil),
         "true" => Some(Bool(true)),
@@ -130,7 +131,7 @@ fn interpret_token(token: String) -> Option<Edn> {
     }
 }
 
-fn match_symbol(s: &str) -> Option<Edn> {
+fn match_symbol(s: &str) -> EdnRet {
     let caps = symbolPat.captures(s);
     if let Some(caps) = caps {
         let ns = caps.get(1);
@@ -200,7 +201,7 @@ fn read_token(reader: &mut ReaderIter, ch: char, lead_constituent: bool) -> Opti
 }
 
 // Macros
-fn read_string(reader: &mut ReaderIter, double_quote: char) -> Option<Edn> {
+fn read_string(reader: &mut ReaderIter, double_quote: char) -> EdnRet {
     if double_quote != '"' {
         unreachable!("Started reading string with {double_quote} but it should always be a \"");
     }
@@ -282,7 +283,7 @@ fn read_unicode_char(
     return char::from_u32(uc);
 }
 
-fn read_comment(reader: &mut ReaderIter, semicolon: char) -> Option<Edn> {
+fn read_comment(reader: &mut ReaderIter, semicolon: char) -> EdnRet {
     assert_eq!(semicolon, ';');
     loop {
         match reader.next() {
@@ -293,19 +294,19 @@ fn read_comment(reader: &mut ReaderIter, semicolon: char) -> Option<Edn> {
     }
     None
 }
-fn read_list(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+fn read_list(reader: &mut ReaderIter, ch: char) -> EdnRet {
     let list = read_delimited_list(')', reader, true);
     return Some(Edn::List(list));
 }
 
-fn read_unmatched_delimiter(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+fn read_unmatched_delimiter(reader: &mut ReaderIter, ch: char) -> EdnRet {
     panic!("Unmatched Delimiter: {ch}");
 }
-fn read_vector(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+fn read_vector(reader: &mut ReaderIter, ch: char) -> EdnRet {
     let vec = read_delimited_list(']', reader, true);
     return Some(Edn::Vec(vec));
 }
-fn read_map(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+fn read_map(reader: &mut ReaderIter, ch: char) -> EdnRet {
     assert_eq!(ch, '{');
     let vec = read_delimited_list('}', reader, true);
     if vec.len().is_odd() {
@@ -319,7 +320,7 @@ fn read_map(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
     }
 }
 
-fn read_character(reader: &mut ReaderIter, backslash: char) -> Option<Edn> {
+fn read_character(reader: &mut ReaderIter, backslash: char) -> EdnRet {
     assert_eq!(backslash, '\\');
     let token = reader.next().and_then(|x| read_token(reader, x, false));
     let c = match token.as_deref() {
@@ -348,7 +349,7 @@ fn read_character(reader: &mut ReaderIter, backslash: char) -> Option<Edn> {
     Some(Char(c))
 }
 
-fn read_dispatch(reader: &mut ReaderIter, hash: char) -> Option<Edn> {
+fn read_dispatch(reader: &mut ReaderIter, hash: char) -> EdnRet {
     assert_eq!(hash, '#');
     let ch = *reader.peek().expect("EOF while reading character");
     if let Some(macro_) = DISPATCH_MACROS.get(&ch) {
@@ -361,7 +362,7 @@ fn read_dispatch(reader: &mut ReaderIter, hash: char) -> Option<Edn> {
     }
 }
 
-fn read_tagged(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+fn read_tagged(reader: &mut ReaderIter, ch: char) -> EdnRet {
     let name = read(reader, true, Nil, false)?;
     if let Symbol(name) = name {
         let o = read(reader, true, Nil, true)?;
@@ -372,7 +373,7 @@ fn read_tagged(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
 }
 
 // Dispatch Macros
-fn read_symbolic_value(reader: &mut ReaderIter, quote: char) -> Option<Edn> {
+fn read_symbolic_value(reader: &mut ReaderIter, quote: char) -> EdnRet {
     assert_eq!(quote, '#');
     let edn = read(reader, true, Nil, true)?;
     let out = match edn {
@@ -387,33 +388,33 @@ fn read_symbolic_value(reader: &mut ReaderIter, quote: char) -> Option<Edn> {
     Some(out)
 }
 
-fn read_meta(reader: &mut ReaderIter, carrot: char) -> Option<Edn> {
+fn read_meta(reader: &mut ReaderIter, carrot: char) -> EdnRet {
     assert_eq!(carrot, '^');
     unimplemented!("Metadata");
 }
 
-fn read_set(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+fn read_set(reader: &mut ReaderIter, ch: char) -> EdnRet {
     assert_eq!(ch, '{');
     let vec = read_delimited_list('}', reader, true);
     Some(Set(vec.into_iter().collect()))
 }
 
-fn read_unreadable(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+fn read_unreadable(reader: &mut ReaderIter, ch: char) -> EdnRet {
     panic!("Unreadable form");
 }
 
-fn read_discard(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+fn read_discard(reader: &mut ReaderIter, ch: char) -> EdnRet {
     assert_eq!(ch, '_');
     read(reader, true, Nil, true);
     None
 }
 
-fn read_namespace_map(reader: &mut ReaderIter, ch: char) -> Option<Edn> {
+fn read_namespace_map(reader: &mut ReaderIter, ch: char) -> EdnRet {
     todo!("Make hashable");
 }
 
 // Matches
-fn match_number(s: &str) -> Option<Edn> {
+fn match_number(s: &str) -> EdnRet {
     // Integer
     let caps = intPat.captures(s);
     if let Some(caps) = caps {
