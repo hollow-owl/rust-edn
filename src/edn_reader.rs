@@ -217,6 +217,7 @@ fn read_string(reader: &mut ReaderIter, double_quote: char) -> EdnRet {
                     'r' => '\r',
                     'n' => '\n',
                     '\\' => '\\',
+                    '"' => '"',
                     'b' => '\u{08}',
                     'f' => '\u{0C}',
                     'u' => {
@@ -366,6 +367,7 @@ fn read_tagged(reader: &mut ReaderIter, ch: char) -> EdnRet {
     let name = read(reader, true, Nil, false)?;
     if let Symbol(name) = name {
         let o = read(reader, true, Nil, true)?;
+        panic!("No reader function for tag {name}");
         Some(TaggedElement(name, Box::new(o)))
     } else {
         panic!("Reader tag must be a symbol");
@@ -390,7 +392,13 @@ fn read_symbolic_value(reader: &mut ReaderIter, quote: char) -> EdnRet {
 
 fn read_meta(reader: &mut ReaderIter, carrot: char) -> EdnRet {
     assert_eq!(carrot, '^');
-    unimplemented!("Metadata");
+    // TODO: Implement metadata
+    let meta = read(reader, true, Nil, true)?;
+    match meta {
+        Symbol(_) | Edn::String(_) | Keyword(_) | Map(_) => {}
+        _ => panic!("Metadata must be Symbol,Keyword,String or Map"),
+    }
+    read(reader, true, Nil, true)
 }
 
 fn read_set(reader: &mut ReaderIter, ch: char) -> EdnRet {
@@ -410,7 +418,30 @@ fn read_discard(reader: &mut ReaderIter, ch: char) -> EdnRet {
 }
 
 fn read_namespace_map(reader: &mut ReaderIter, ch: char) -> EdnRet {
-    todo!("Make hashable");
+    assert_eq!(ch, ':');
+    let sym = read(reader, true, Nil, false);
+    if let Some(Symbol(sym)) = sym {
+        // TODO: check that sym has a namespace
+    }
+    // Skip whitespace
+    while reader.peek().is_some_and(|&x| is_whitespace(x)) {
+        let _ = reader.next();
+    }
+    let ch = reader.next().expect("EOF while reading");
+    if ch != '{' {
+        panic!("Namespaced map must specify a map");
+    }
+    let vec = read_delimited_list('}', reader, true);
+    if vec.len().is_odd() {
+        panic!("Map literal must contain an even number of forms");
+    } else {
+        let map = vec
+            .chunks_exact(2)
+            .map(|chunk| (chunk[0].clone(), chunk[1].clone()))
+            .collect();
+        // TODO: Construct output map
+        Some(Map(map))
+    }
 }
 
 // Matches
@@ -464,7 +495,7 @@ fn match_number(s: &str) -> EdnRet {
 
     let caps = floatPat.captures(s);
     if let Some(caps) = caps {
-        if let Some(m) = caps.get(4) {
+        if caps.get(4).is_some() {
             let bd = BigDecimal::from_str(caps.get(1).unwrap().as_str()).unwrap();
             return Some(Edn::BigDecimal(bd));
         } else {
@@ -473,7 +504,7 @@ fn match_number(s: &str) -> EdnRet {
     }
 
     let caps = ratioPat.captures(s);
-    if let Some(caps) = caps {
+    if caps.is_some() {
         let ratio = BigRational::from_str(s).unwrap();
         return Some(Edn::BigRational(ratio));
     }
@@ -487,8 +518,7 @@ fn read_delimited_list(delim: char, reader: &mut ReaderIter, is_recursive: bool)
         while reader.peek().is_some_and(|&x| is_whitespace(x)) {
             let _ = reader.next();
         }
-        let ch = reader.peek();
-        match ch {
+        match reader.peek() {
             None => panic!("EOF while reading"),
             Some(&ch) if ch == delim => {
                 let _ = reader.next();
