@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     f64::{INFINITY, NAN, NEG_INFINITY},
@@ -9,6 +10,7 @@ use bigdecimal::BigDecimal;
 use lazy_static::lazy_static;
 use num::{BigInt, BigRational, Integer, Num, ToPrimitive};
 use ordered_float::OrderedFloat;
+use ordermap::OrderMap;
 use regex::Regex;
 use std::str::FromStr;
 
@@ -367,7 +369,9 @@ fn read_tagged(reader: &mut ReaderIter, ch: char) -> EdnRet {
     let name = read(reader, true, Nil, false)?;
     if let Symbol(name) = name {
         let o = read(reader, true, Nil, true)?;
-        panic!("No reader function for tag {name}");
+        if !vec!["uuid", "inst"].contains(&name.as_str()) {
+            panic!("No reader function for tag {name}");
+        }
         Some(TaggedElement(name, Box::new(o)))
     } else {
         panic!("Reader tag must be a symbol");
@@ -577,4 +581,58 @@ fn is_terminating_macro(ch: char) -> bool {
 
 fn is_macro(ch: char) -> bool {
     MACROS.get(&ch).is_some()
+}
+
+impl fmt::Display for Edn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Nil => write!(f, "nil"),
+            Bool(b) => write!(f, "{b}"),
+            Edn::String(s) => write!(f, "\"{s}\""),
+            Char(c) => write!(f, "\\{c}"),
+            Symbol(s) => write!(f, "{s}"),
+            Keyword(k) => write!(f, ":{k}"),
+            Int(n) => write!(f, "{n}"),
+            Edn::BigInt(n) => write!(f, "{n}N"),
+            Float(n) => write!(f, "{n}"),
+            Edn::BigDecimal(n) => write!(f, "{n}M"),
+            Edn::BigRational(n) => write!(f, "{n}R"),
+            Edn::List(vec) => write_delimited_list(f, "(", vec, ")"),
+            Edn::Vec(vec) => write_delimited_list(f, "[", vec, "]"),
+            Set(btree_set) => write_delimited_list(f, "#{", btree_set, "}"),
+            Map(map) => {
+                write!(f, "{{")?;
+                let fmt_map = map
+                    .iter()
+                    .map(|(k, v)| format!("{k} {v}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "{fmt_map}")?;
+                write!(f, "}}")
+                // write_delimited_list(
+                //     f,
+                //     "{",
+                //     btree_map.into_iter().flat_map(|(a, b)| vec![a, b]),
+                //     "}",
+                // )
+            }
+            TaggedElement(tag, edn) => write!(f, "#{tag} {edn}"),
+        }
+    }
+}
+
+fn write_delimited_list<'a, I: IntoIterator<Item = &'a Edn>>(
+    f: &mut std::fmt::Formatter<'_>,
+    start: &str,
+    iter: I,
+    end: &str,
+) -> Result<(), std::fmt::Error> {
+    write!(f, "{start}")?;
+    for (i, item) in iter.into_iter().enumerate() {
+        if i > 0 {
+            write!(f, " ")?;
+        }
+        write!(f, "{item}")?;
+    }
+    write!(f, "{end}")
 }

@@ -7,9 +7,11 @@ edition = "2021"
 
 [dependencies]
 bigdecimal = "0.4.7"
+indexmap = "2.7.1"
 lazy_static = "1.5.0"
 num = "0.4.3"
 ordered-float = "4.6.0"
+ordermap = "0.5.5"
 pest = "2.7.5"
 pest_derive = "2.7.5"
 regex = "1.11.1"
