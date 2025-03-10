@@ -11,11 +11,11 @@ pub fn rust_edn(input: &str) -> Option<String> {
     Some(b)
 }
 
-pub fn clojure_edn(input: &str) -> Option<String> {
+pub fn clojure_edn(input: &str) -> Result<String, String> {
     let mut child = Command::new("clojure")
         .arg("-M")
         .arg("-e")
-        .arg("(clojure.edn/read *in*)")
+        .arg("(do (set! *print-namespace-maps* false) (clojure.edn/read *in*))")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -49,5 +49,9 @@ pub fn clojure_edn(input: &str) -> Option<String> {
     let mut msg = err.trim().split('\n');
     msg.next();
     err = msg.next().unwrap_or("").to_owned();
-    Some(format!("{output}{err}").trim().to_string())
+    if err.is_empty() {
+        Ok(output.trim().to_string())
+    } else {
+        Err(format!("{output}{err}").trim().to_string())
+    }
 }

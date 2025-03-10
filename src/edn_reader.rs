@@ -424,9 +424,17 @@ fn read_discard(reader: &mut ReaderIter, ch: char) -> EdnRet {
 fn read_namespace_map(reader: &mut ReaderIter, ch: char) -> EdnRet {
     assert_eq!(ch, ':');
     let sym = read(reader, true, Nil, false);
-    if let Some(Symbol(sym)) = sym {
-        // TODO: check that sym has a namespace
-    }
+    let namespace = {
+        if let Some(Symbol(sym)) = sym {
+            let (ns, name) = sym_split(&sym)?;
+            if !ns.is_none() {
+                panic!("Namespaced map must specify a valid namespace: {sym}");
+            }
+            Some(name.to_string())
+        } else {
+            None
+        }
+    };
     // Skip whitespace
     while reader.peek().is_some_and(|&x| is_whitespace(x)) {
         let _ = reader.next();
@@ -442,6 +450,32 @@ fn read_namespace_map(reader: &mut ReaderIter, ch: char) -> EdnRet {
         let map = vec
             .chunks_exact(2)
             .map(|chunk| (chunk[0].clone(), chunk[1].clone()))
+            .map(|chunk| {
+                if let Some(namespace) = namespace.as_deref() {
+                    let new_key = match chunk.0 {
+                        Keyword(kw) => {
+                            let (ns, name) = sym_split(&kw).unwrap();
+                            match ns {
+                                Some(ns) if ns == "_/" => Keyword(format!("{name}")),
+                                None => Keyword(format!("{namespace}/{name}")),
+                                _ => Keyword(kw),
+                            }
+                        }
+                        Symbol(sym) => {
+                            let (ns, name) = sym_split(&sym).unwrap();
+                            match ns {
+                                Some(ns) if ns == "_/" => Symbol(format!("{name}")),
+                                None => Symbol(format!("{namespace}/{name}")),
+                                _ => Symbol(sym),
+                            }
+                        }
+                        _ => chunk.0,
+                    };
+                    (new_key, chunk.1)
+                } else {
+                    chunk
+                }
+            })
             .collect();
         // TODO: Construct output map
         Some(Map(map))
@@ -635,4 +669,12 @@ fn write_delimited_list<'a, I: IntoIterator<Item = &'a Edn>>(
         write!(f, "{item}")?;
     }
     write!(f, "{end}")
+}
+
+fn sym_split(sym: &str) -> Option<(Option<&str>, &str)> {
+    let caps = symbolPat.captures(sym)?;
+    Some((
+        caps.get(1).map(|x| x.as_str()),
+        caps.get(2).unwrap().as_str(),
+    ))
 }
