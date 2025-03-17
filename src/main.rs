@@ -5,6 +5,7 @@ mod edn_reader;
 use std::{
     fs,
     io::{self, Read, Write},
+    path::Path,
     process::{Command, Stdio},
 };
 
@@ -18,6 +19,13 @@ fn repl() {
         io::stdin()
             .read_line(&mut input)
             .expect("Failed to read input");
+        if input.starts_with("file ") {
+            let path = input.trim_start_matches("file ").trim();
+            dbg!(path);
+            let r_edn = edn_file(path).unwrap();
+            println!("{r_edn}");
+            continue;
+        }
         let r_edn = rust_edn(&input);
         dbg!(&r_edn);
         let c_edn = clojure_edn(&input);
@@ -28,64 +36,17 @@ fn repl() {
     }
 }
 
-// {:country "GB", :gid #uuid "7d0162a9-2636-46f2-b0e8-a9336075eee2", :sort_name "His Master's Voice", :name "His Master's Voice", :type "Original Production"}
+fn edn_file<P: AsRef<Path>>(path: P) -> Option<String> {
+    let contents = fs::read_to_string(&path).unwrap();
+    rust_edn(&contents)
+}
+
 fn main() {
     repl();
-    // let failing_files = vec![
-    //     "examples/output/chat.edn",
-    //     "examples/output/config.edn.2",
-    //     "examples/output/create-access-token.edn",
-    //     "examples/output/de.edn",
-    //     "examples/output/de.edn.1",
-    //     "examples/output/de.edn.2",
-    //     "examples/output/default-rc.edn.1",
-    //     "examples/output/dellstore-schema.edn",
-    //     "examples/output/demo3.001.edn",
-    //     "examples/output/double-ls.edn",
-    //     "examples/output/double-ls.edn.1",
-    //     "examples/output/double-ls.edn.2",
-    //     "examples/output/double-ls.edn.3",
-    //     "examples/output/double-ls.edn.4",
-    //     "examples/output/example_list.edn",
-    //     "examples/output/imperfect.edn",
-    //     "examples/output/ja.edn",
-    //     "examples/output/maps_unrecognized_keys.edn",
-    //     "examples/output/number.edn",
-    //     "examples/output/number.edn.1",
-    //     "examples/output/number.edn.2",
-    //     "examples/output/pipeline-with-includes.edn",
-    //     "examples/output/pll_64M.edn",
-    //     "examples/output/production.edn",
-    //     "examples/output/provenance.edn",
-    //     "examples/output/provenance.edn.1",
-    //     "examples/output/provenance.edn.2",
-    //     "examples/output/put-resource.edn",
-    //     "examples/output/questions-2019.edn",
-    //     "examples/output/RAM.edn",
-    //     "examples/output/sample_data.edn",
-    //     "examples/output/sample.edn.1",
-    //     "examples/output/schema.edn.1",
-    //     "examples/output/seattle-data1.edn",
-    //     "examples/output/seattle-data1.edn.1",
-    //     "examples/output/seattle-data1.edn.2",
-    //     "examples/output/shadow-cljs.edn.17",
-    //     "examples/output/shadow-cljs.edn.22",
-    //     "examples/output/spfloat-comp.edn",
-    //     "examples/output/spfloat-comp.edn.1",
-    //     "examples/output/spfloat-comp.edn.2",
-    //     "examples/output/spfloat-comp.edn.3",
-    //     "examples/output/spfloat-comp.edn.4",
-    //     "examples/output/system.edn",
-    //     "examples/output/temperature.edn",
-    //     "examples/output/time.edn",
-    //     "examples/output/traefik.edn",
-    // ];
-    // for f in failing_files.into_iter() {
-    //     let file = fs::read_to_string(f).expect("could not read file");
-    //     if !is_match(file.as_str()) {
-    //         println!("Failed on {f}")
-    //     }
-    // }
+    // let path = "./examples/output/dds.edn";
+    // let contents = fs::read_to_string(&path).unwrap();
+    // let r_edn = rust_edn(&contents).unwrap();
+    // println!("{r_edn}");
 }
 
 #[cfg(test)]
@@ -192,21 +153,41 @@ mod tests {
             }
         }
     }
+
     #[test]
-    fn test_output() {
-        // "./examples/output/color_rom.edn.2"
-        let ignore = vec![
-            "./examples/output/tag-inst.edn",
-            // Long diff don't know whats different, xlinx stuff
-            "./examples/output/dds.edn",
-            "./examples/output/color_rom.edn",
-            "./examples/output/color_rom.edn.1",
-            "./examples/output/color_rom.edn.2",
-            "./examples/output/color_rom.edn.3",
-            "./examples/output/color_rom.edn.4",
-        ]
-        .into_iter()
-        .collect::<HashSet<&str>>();
+    fn test_invalid_edn_reasons() {
+        let mut invalid_no_tags = File::create("invlaid_no_tags_edn.txt").unwrap();
+        let paths = fs::read_to_string("invalid_edn.txt").unwrap();
+
+        for path in paths.lines() {
+            let contents = fs::read_to_string(&path).unwrap();
+            let c_edn = clojure_edn(&contents);
+            if let Err(err_msg) = c_edn {
+                if err_msg.contains("No reader function for tag") {
+                    continue;
+                } else {
+                    writeln!(invalid_no_tags, "{path} | {err_msg}").unwrap();
+                }
+            } else {
+                println!("{path} not error!")
+            }
+        }
+    }
+
+    #[test]
+    fn test_invalid_no_tags_output() {
+        let paths = fs::read_to_string("invalid_no_tags.txt").unwrap();
+        for line in paths.lines() {
+            let (path, reason) = line.split_once(" | ").unwrap();
+            let contents = fs::read_to_string(&path).unwrap();
+            let r_edn = rust_edn(&contents);
+        }
+    }
+    #[test]
+    fn test_valid_output() {
+        let ignore = vec!["./examples/output/tag-inst.edn"]
+            .into_iter()
+            .collect::<HashSet<&str>>();
         let paths = fs::read_to_string("valid_edn.txt").unwrap();
         for path in paths.lines() {
             if ignore.contains(path) {

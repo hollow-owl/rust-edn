@@ -622,7 +622,15 @@ impl fmt::Display for Edn {
         match self {
             Nil => write!(f, "nil"),
             Bool(b) => write!(f, "{b}"),
-            Edn::String(s) => write!(f, "\"{s}\""),
+            Edn::String(s) => write!(
+                f,
+                "\"{}\"",
+                s.replace("\r\n", "\n")
+                    .chars()
+                    .flat_map(|c| c.escape_default())
+                    .collect::<String>()
+                    .replace("\\'", "'")
+            ),
             Char(c) => write!(f, "\\{c}"),
             Symbol(s) => write!(f, "{s}"),
             Keyword(k) => write!(f, ":{k}"),
@@ -643,12 +651,6 @@ impl fmt::Display for Edn {
                     .join(", ");
                 write!(f, "{fmt_map}")?;
                 write!(f, "}}")
-                // write_delimited_list(
-                //     f,
-                //     "{",
-                //     btree_map.into_iter().flat_map(|(a, b)| vec![a, b]),
-                //     "}",
-                // )
             }
             TaggedElement(tag, edn) => write!(f, "#{tag} {edn}"),
         }

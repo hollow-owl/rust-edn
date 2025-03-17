@@ -18,4 +18,5 @@ regex = "1.11.1"
 serde = { version = "1.0.197", features = ["derive"] }
 
 [dev-dependencies]
+text-diff = "0.4.0"
 walkdir = "2.4.0"
