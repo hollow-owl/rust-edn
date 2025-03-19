@@ -36,14 +36,14 @@ fn repl() {
     }
 }
 
-fn edn_file<P: AsRef<Path>>(path: P) -> Option<String> {
+fn edn_file<P: AsRef<Path>>(path: P) -> Result<String, String> {
     let contents = fs::read_to_string(&path).unwrap();
     rust_edn(&contents)
 }
 
 fn main() {
     repl();
-    // let path = "./examples/output/dds.edn";
+    // let path = "./test.edn";
     // let contents = fs::read_to_string(&path).unwrap();
     // let r_edn = rust_edn(&contents).unwrap();
     // println!("{r_edn}");
@@ -190,6 +190,7 @@ mod tests {
             .collect::<HashSet<&str>>();
         let paths = fs::read_to_string("valid_edn.txt").unwrap();
         for path in paths.lines() {
+            println!("Testing {path}");
             if ignore.contains(path) {
                 println!("Skipping {path}");
                 continue;
@@ -203,12 +204,13 @@ mod tests {
             // rust parse -> rust serialize -> clojure parse -> clojure serialize == clojure parse -> clojure serialize -> rust parse -> rust serializeo
 
             // rust parse -> rust serialize == clojure parse -> clojure serialize -> rust parse -> rust serialize
-            if let (Some(r), Some(c)) = (r_edn.as_deref(), cr_edn.as_deref()) {
+            if let (Ok(r), Ok(c)) = (r_edn.as_deref(), cr_edn.as_deref()) {
                 let (diff, change) = diff(r, c, " ");
                 if diff != 0 {
                     println!("{path} does not match");
                 }
             } else {
+                dbg!((&r_edn, &cr_edn));
                 panic!("{path} Not success");
             }
         }

@@ -5,10 +5,10 @@ use std::{
 
 use crate::edn_reader;
 
-pub fn rust_edn(input: &str) -> Option<String> {
+pub fn rust_edn(input: &str) -> Result<String, String> {
     let a = edn_reader::read_str(input.to_string())?;
     let b = format!("{a}");
-    Some(b)
+    Ok(b)
 }
 
 pub fn clojure_edn(input: &str) -> Result<String, String> {
