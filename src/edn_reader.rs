@@ -41,7 +41,7 @@ type EdnResultOption = Result<Option<Edn>, String>;
 type Reader = fn(&mut ReaderIter, char) -> EdnResultOption;
 
 lazy_static! {
-    static ref symbolPat: Regex = Regex::new("^[:]?([\\D&&[^/]].*/)?(/|[\\D&&[^/]][^/]*)").unwrap();
+    static ref symbolPat: Regex = Regex::new(r#"^[:]?([\D&&[^/]].*/)?(/|[\D&&[^/]][^/]*)$"#).unwrap();
     // static ref symbolPat: Regex = Regex::new(r"[:]?((?:[^0-9/].*/)?(/|[^0-9/][^/]*))").unwrap();
     static ref intPat: Regex = Regex::new("^([-+]?)(?:(0)|([1-9][0-9]*)|0[xX]([0-9A-Fa-f]+)|0([0-7]+)|([1-9][0-9]?)[rR]([0-9A-Za-z]+)|0[0-9]+)(N)?").unwrap();
     static ref ratioPat: Regex = Regex::new("^([-+]?[0-9]+)/([0-9]+)").unwrap();
@@ -89,7 +89,7 @@ pub fn read(
     loop {
         // dbg!(reader.clone().collect::<String>());
         skip_whitespace(reader);
-        let ch = reader.next().expect("EOF while reading");
+        let ch = reader.next().ok_or("EOF while reading")?;
 
         if ch.is_digit(10) {
             return read_number(reader, ch);
@@ -188,7 +188,7 @@ fn read_token(reader: &mut ReaderIter, ch: char, lead_constituent: bool) -> Resu
             None => return Ok(out),
             Some(&ch) if is_whitespace(ch) || is_terminating_macro(ch) => return Ok(out),
             Some(&ch) if non_constituent(ch) => {
-                return Err(format!("Invalid contituent character: {ch}"))
+                return Err(format!("Invalid constituent character: {ch}"))
             }
             Some(&ch) => {
                 out.push(ch);
