@@ -5,7 +5,6 @@ mod edn_reader;
 use std::{
     env, fs,
     io::{self, Write},
-    path::Path,
 };
 
 use edn_compare::{clojure_edn, rust_edn};
@@ -21,7 +20,8 @@ fn repl() {
         if input.starts_with("file ") {
             let path = input.trim_start_matches("file ").trim();
             dbg!(path);
-            let r_edn = edn_file(path).unwrap();
+            let contents = fs::read_to_string(&path).unwrap();
+            let r_edn = rust_edn(&contents).unwrap();
             println!("{r_edn}");
             continue;
         }
@@ -30,11 +30,6 @@ fn repl() {
         let c_edn = clojure_edn(&input);
         dbg!(&c_edn);
     }
-}
-
-fn edn_file<P: AsRef<Path>>(path: P) -> Result<String, String> {
-    let contents = fs::read_to_string(&path).unwrap();
-    rust_edn(&contents)
 }
 
 fn main() {
@@ -49,7 +44,6 @@ fn main() {
         file_path
     };
     if let Some(path) = path {
-        // let path = "./examples/output/default-rc.edn.1";
         let contents = fs::read_to_string(&path).unwrap();
         let r_edn = rust_edn(&contents).unwrap();
         println!("{r_edn}");
