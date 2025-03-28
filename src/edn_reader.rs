@@ -1,7 +1,6 @@
 use core::fmt;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
-    f64::{INFINITY, NAN, NEG_INFINITY},
     iter::Peekable,
     str::Chars,
 };
@@ -76,22 +75,21 @@ lazy_static! {
 
 pub fn read_str(s: String) -> EdnResult {
     let mut reader = s.chars().peekable();
-    let out = read(&mut reader, true, Edn::Nil, false);
-    out
+    read(&mut reader, true, Edn::Nil, false)
 }
 
 pub fn read(
     reader: &mut ReaderIter,
-    eof_is_error: bool,
-    eof_value: Edn,
-    is_recursive: bool,
+    _eof_is_error: bool,
+    _eof_value: Edn,
+    _is_recursive: bool,
 ) -> EdnResult {
     loop {
         // dbg!(reader.clone().collect::<String>());
         skip_whitespace(reader);
         let ch = reader.next().ok_or("EOF while reading")?;
 
-        if ch.is_digit(10) {
+        if ch.is_ascii_digit() {
             return read_number(reader, ch);
         }
 
@@ -103,10 +101,8 @@ pub fn read(
             }
         }
 
-        if ch == '+' || ch == '-' {
-            if reader.peek().expect("EOF while reading").is_digit(10) {
-                return read_number(reader, ch);
-            }
+        if (ch == '+' || ch == '-') && reader.peek().expect("EOF while reading").is_ascii_digit() {
+            return read_number(reader, ch);
         }
 
         let token = read_token(reader, ch, true)?;
@@ -147,12 +143,12 @@ fn match_symbol(s: &str) -> EdnRet {
         let is_keyword = s.starts_with(":");
         let sym = s[if is_keyword { 1 } else { 0 }..].to_string();
         if is_keyword {
-            return Some(Keyword(sym));
+            Some(Keyword(sym))
         } else {
-            return Some(Symbol(sym));
+            Some(Symbol(sym))
         }
     } else {
-        return None;
+        None
     }
 }
 
@@ -172,8 +168,7 @@ fn read_number(reader: &mut ReaderIter, ch: char) -> EdnResult {
         }
     }
 
-    let n = match_number(&s).ok_or(format!("Invalid number: {s}"));
-    return n;
+    match_number(&s).ok_or(format!("Invalid number: {s}"))
 }
 
 fn read_token(reader: &mut ReaderIter, ch: char, lead_constituent: bool) -> Result<String, String> {
@@ -220,18 +215,18 @@ fn read_string(reader: &mut ReaderIter, double_quote: char) -> EdnResultOption {
                     'f' => '\u{0C}',
                     'u' => {
                         let ch = reader.next().unwrap();
-                        if !ch.is_digit(16) {
+                        if !ch.is_ascii_hexdigit() {
                             return Err(format!("Unvalid unicode escape: \\u{ch}"));
                         }
                         read_unicode_char(reader, ch, 16, 4, true).unwrap()
                     }
                     ch => {
-                        if ch.is_digit(10) {
+                        if ch.is_ascii_digit() {
                             let ch = read_unicode_char(reader, ch, 8, 3, false).unwrap();
                             if (ch as u32) > 0o377 {
-                                return Err(format!(
-                                    "Octal escape sequence must be in range [0, 377].",
-                                ));
+                                return Err(
+                                    "Octal escape sequence must be in range [0, 377].".to_string()
+                                );
                             }
                             ch
                         } else {
@@ -244,7 +239,7 @@ fn read_string(reader: &mut ReaderIter, double_quote: char) -> EdnResultOption {
         };
         out.push(ch);
     }
-    return Ok(Some(Edn::String(out)));
+    Ok(Some(Edn::String(out)))
 }
 
 fn read_unicode_char(
@@ -256,7 +251,7 @@ fn read_unicode_char(
 ) -> Result<char, String> {
     let mut uc = {
         let uc = ch.to_digit(base);
-        if let None = uc {
+        if uc.is_none() {
             return Err(format!("Invalid digit: {ch}"));
         }
         uc.unwrap()
@@ -283,7 +278,7 @@ fn read_unicode_char(
             "Invalid character length: {i}, should be: {length}"
         ));
     }
-    return char::from_u32(uc).ok_or(format!("Invalid character: {uc}"));
+    char::from_u32(uc).ok_or(format!("Invalid character: {uc}"))
 }
 
 fn read_comment(reader: &mut ReaderIter, semicolon: char) -> EdnResultOption {
@@ -298,22 +293,24 @@ fn read_comment(reader: &mut ReaderIter, semicolon: char) -> EdnResultOption {
     Ok(None)
 }
 fn read_list(reader: &mut ReaderIter, ch: char) -> EdnResultOption {
+    assert_eq!(ch, '(');
     let list = read_delimited_list(')', reader, true)?;
-    return Ok(Some(Edn::List(list)));
+    Ok(Some(Edn::List(list)))
 }
 
-fn read_unmatched_delimiter(reader: &mut ReaderIter, ch: char) -> EdnResultOption {
-    return Err(format!("Unmatched Delimiter: {ch}"));
+fn read_unmatched_delimiter(_reader: &mut ReaderIter, ch: char) -> EdnResultOption {
+    Err(format!("Unmatched Delimiter: {ch}"))
 }
 fn read_vector(reader: &mut ReaderIter, ch: char) -> EdnResultOption {
+    assert_eq!(ch, '[');
     let vec = read_delimited_list(']', reader, true)?;
-    return Ok(Some(Edn::Vec(vec)));
+    Ok(Some(Edn::Vec(vec)))
 }
 fn read_map(reader: &mut ReaderIter, ch: char) -> EdnResultOption {
     assert_eq!(ch, '{');
     let vec = read_delimited_list('}', reader, true)?;
     if vec.len().is_odd() {
-        return Err(format!("Map literal must contain an even number of forms"));
+        Err("Map literal must contain an even number of forms".to_string())
     } else {
         let map = vec
             .chunks_exact(2)
@@ -333,6 +330,7 @@ fn read_character(reader: &mut ReaderIter, backslash: char) -> EdnResultOption {
     let c = match token.as_ref() {
         t if t.len() == 1 => t.chars().next().unwrap(),
         "newline" => '\n',
+        "space" => ' ',
         "tab" => '\t',
         "backspace" => '\u{08}',
         "formfeed" => '\u{0C}',
@@ -369,15 +367,16 @@ fn read_dispatch(reader: &mut ReaderIter, hash: char) -> EdnResultOption {
 }
 
 fn read_tagged(reader: &mut ReaderIter, ch: char) -> EdnResult {
+    assert!(ch.is_alphabetic());
     let name = read(reader, true, Nil, false)?;
     if let Symbol(name) = name {
         let o = read(reader, true, Nil, true)?;
-        if !vec!["uuid", "inst"].contains(&name.as_str()) {
+        if !["uuid", "inst"].contains(&name.as_str()) {
             return Err(format!("No reader function for tag {name}"));
         }
         Ok(TaggedElement(name, Box::new(o)))
     } else {
-        return Err(format!("Reader tag must be a symbol"));
+        Err("Reader tag must be a symbol".to_string())
     }
 }
 
@@ -387,9 +386,9 @@ fn read_symbolic_value(reader: &mut ReaderIter, quote: char) -> EdnResultOption 
     let edn = read(reader, true, Nil, true)?;
     let out = match edn {
         Symbol(s) => match s.as_ref() {
-            "Inf" => Edn::Float(INFINITY.into()),
-            "-Inf" => Edn::Float(NEG_INFINITY.into()),
-            "NaN" => Edn::Float(NAN.into()),
+            "Inf" => Edn::Float(f64::INFINITY.into()),
+            "-Inf" => Edn::Float(f64::NEG_INFINITY.into()),
+            "NaN" => Edn::Float(f64::NAN.into()),
             _ => return Err(format!("Unkown symbolic value: ##{s}")),
         },
         _ => return Err(format!("Invalid token: ##{edn:?}")),
@@ -403,7 +402,7 @@ fn read_meta(reader: &mut ReaderIter, carrot: char) -> EdnResultOption {
     let meta = read(reader, true, Nil, true)?;
     match meta {
         Symbol(_) | Edn::String(_) | Keyword(_) | Map(_) => {}
-        _ => return Err(format!("Metadata must be Symbol,Keyword,String or Map")),
+        _ => return Err("Metadata must be Symbol,Keyword,String or Map".to_string()),
     }
     read(reader, true, Nil, true).map(Some)
 }
@@ -414,8 +413,8 @@ fn read_set(reader: &mut ReaderIter, ch: char) -> EdnResultOption {
     Ok(Some(Set(vec.into_iter().collect())))
 }
 
-fn read_unreadable(reader: &mut ReaderIter, ch: char) -> EdnResultOption {
-    return Err(format!("Unreadable form"));
+fn read_unreadable(_reader: &mut ReaderIter, _ch: char) -> EdnResultOption {
+    Err("Unreadable form".to_string())
 }
 
 fn read_discard(reader: &mut ReaderIter, ch: char) -> EdnResultOption {
@@ -443,11 +442,11 @@ fn read_namespace_map(reader: &mut ReaderIter, ch: char) -> EdnResultOption {
     skip_whitespace(reader);
     let ch = reader.next().expect("EOF while reading");
     if ch != '{' {
-        return Err(format!("Namespaced map must specify a map"));
+        return Err("Namespaced map must specify a map".to_string());
     }
     let vec = read_delimited_list('}', reader, true)?;
     if vec.len().is_odd() {
-        return Err(format!("Map literal must contain an even number of forms"));
+        return Err("Map literal must contain an even number of forms".to_string());
     } else {
         let map = vec
             .chunks_exact(2)
@@ -559,7 +558,7 @@ fn read_delimited_list(
     loop {
         skip_whitespace(reader);
         match reader.peek() {
-            None => return Err(format!("EOF while reading")),
+            None => return Err("EOF while reading".to_string()),
             Some(&ch) if ch == delim => {
                 let _ = reader.next();
                 break;
@@ -601,7 +600,7 @@ fn read_unicode_char_from_token(
         }
     }
 
-    return Ok(char::from_u32(uc));
+    Ok(char::from_u32(uc))
 }
 // Utils
 fn non_constituent(ch: char) -> bool {
@@ -634,6 +633,7 @@ impl fmt::Display for Edn {
                     .collect::<String>()
                     .replace("\\'", "'")
             ),
+            Char(' ') => write!(f, "\\space"),
             Char(c) => write!(f, "\\{c}"),
             Symbol(s) => write!(f, "{s}"),
             Keyword(k) => write!(f, ":{k}"),

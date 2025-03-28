@@ -1,5 +1,4 @@
 mod edn_compare;
-mod edn_pest;
 mod edn_reader;
 
 use std::{
@@ -20,7 +19,7 @@ fn repl() {
         if input.starts_with("file ") {
             let path = input.trim_start_matches("file ").trim();
             dbg!(path);
-            let contents = fs::read_to_string(&path).unwrap();
+            let contents = fs::read_to_string(path).unwrap();
             let r_edn = rust_edn(&contents).unwrap();
             println!("{r_edn}");
             continue;
@@ -33,7 +32,7 @@ fn repl() {
 }
 
 fn main() {
-    let args = env::args().into_iter().collect::<Vec<String>>();
+    let args = env::args().collect::<Vec<String>>();
     let path = {
         let mut file_path = None;
         for i in 0..args.len() {
@@ -44,7 +43,7 @@ fn main() {
         file_path
     };
     if let Some(path) = path {
-        let contents = fs::read_to_string(&path).unwrap();
+        let contents = fs::read_to_string(path).unwrap();
         let r_edn = rust_edn(&contents).unwrap();
         println!("{r_edn}");
     } else {
@@ -71,8 +70,8 @@ mod tests {
         for path in paths {
             let path = path.unwrap().path();
             let path_str = path.as_os_str().to_str().unwrap();
-            println!("Testing {path_str}");
             let contents = fs::read_to_string(&path).unwrap();
+            println!("Testing {path_str}");
             let c_edn = clojure_edn(&contents);
             match c_edn {
                 Ok(_) => writeln!(valid_file, "{path_str}").unwrap(),
@@ -88,7 +87,7 @@ mod tests {
         for line in paths.lines() {
             let (path, reason) = line.split_once(" | ").unwrap();
             println!("Testing {path}");
-            let contents = fs::read_to_string(&path).unwrap();
+            let contents = fs::read_to_string(path).unwrap();
             let r_edn = rust_edn(&contents);
 
             match r_edn.as_deref() {
@@ -110,7 +109,7 @@ mod tests {
                 println!("Skipping {path}");
                 continue;
             }
-            let contents = fs::read_to_string(&path).unwrap();
+            let contents = fs::read_to_string(path).unwrap();
             let r_edn = rust_edn(&contents);
             let c_edn = clojure_edn(&contents);
             let cr_edn = c_edn.map(|x| rust_edn(&x)).unwrap();
