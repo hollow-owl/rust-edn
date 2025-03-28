@@ -5,7 +5,7 @@ Goal to conform to the [EDN Spec](https://github.com/edn-format/edn) as close as
 
 # TODO
 - `#[derive(Serialize, Deserialize)]` traits
-- to string
+<!-- - to string
 - publish to crates.io
 -
 - handle #_, #inst, #uuid
@@ -30,4 +30,4 @@ https://github.com/OSI-INC/P3051/blob/master/RAM.edn
 RAM.edn is EDIF apparently
 https://en.wikipedia.org/wiki/EDIF
 
-https://nitor.com/en/articles/pitfalls-and-bumps-clojures-extensible-data-notation-edn
+https://nitor.com/en/articles/pitfalls-and-bumps-clojures-extensible-data-notation-edn -->

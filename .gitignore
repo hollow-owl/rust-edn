@@ -1,2 +1,4 @@
 /target
-/alternatives
+examples/output
+invalid_edn.txt
+valid_edn.txt
